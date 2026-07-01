@@ -1,0 +1,31 @@
+{
+  "client_info": {
+    "client_name": "Stress Test Patient",
+    "client_id": "TEST-STRESS-001"
+  },
+  "session_metadata": {
+    "session_start": "2026-07-03T08:00:00Z",
+    "session_end": "2026-07-03T11:00:00Z"
+  },
+  "diagnoses": {
+    "icd_1": "A18.01",
+    "icd_2": "G54.2",
+    "icd_3": "M50.11",
+    "icd_4": "X99.99"
+  },
+  "billing_detection_summary": {
+    "total_cpt_detected": 9
+  },
+  "detected_cpt_codes": [
+    {"cpt_code": "97750", "sequence": 1, "timestamp_start": "00:00:00", "timestamp_end": "00:45:00"},
+    {"cpt_code": "97110", "sequence": 2, "timestamp_start": "00:45:00", "timestamp_end": "00:52:00"},
+    {"cpt_code": "97140", "sequence": 3, "timestamp_start": "00:52:00", "timestamp_end": "00:59:00"},
+    {"cpt_code": "97150", "sequence": 4, "timestamp_start": "01:00:00", "timestamp_end": "01:30:00"},
+    {"cpt_code": "97530", "sequence": 5, "timestamp_start": "01:00:00", "timestamp_end": "01:30:00"},
+    {"cpt_code": "97546", "sequence": 6, "timestamp_start": "01:30:00", "timestamp_end": "02:30:00"},
+    {"cpt_code": "97012", "sequence": 7, "timestamp_start": "02:30:00", "timestamp_end": "03:00:00"},
+    {"cpt_code": "97014", "sequence": 8, "timestamp_start": "02:30:00", "timestamp_end": "03:00:00"},
+    {"cpt_code": "97110", "sequence": 9, "timestamp_start": "02:30:00", "timestamp_end": "03:30:00"}
+  ],
+  "whole_transcript": "Therapist: Good morning! How are you feeling today?\nPatient: My neck is still pretty stiff, honestly.\nTherapist: Okay, well, we have a long session planned today. First, I want to administer a physical performance test to see where your baseline is at right now. We'll take our time with it.\nPatient: Sounds good.\n[45 minutes of physical performance testing - 97750]\nTherapist: Alright, let's loosen up that neck. We're going to do some gentle therapeutic exercises. Let's start by doing some basic range of motion exercises.\n[7 minutes of therapeutic exercises - 97110]\nTherapist: Good. Now I'm going to do some manual therapy on you. Just a little cervical joint mobilization to help with that stiffness.\n[7 minutes of manual therapy - 97140]\nTherapist: Okay, I want you to head over to the main gym area. You'll join the others for some group therapy. They're doing some group exercises right now.\n[30 minutes of group therapy - 97150]\nTherapist: Step out of the group for a second, let's do some one-on-one therapeutic activities. We really need to work on your transfer training from the mat.\n[30 minutes of therapeutic activities - 97530]\nTherapist: You're doing great. Now we're moving into the advanced stuff. We're going to spend an hour working on work conditioning and work hardening activities simulating your desk setup.\n[60 minutes of work hardening add-on - 97546]\nTherapist: Let's give you a break. I'm going to apply mechanical traction to decompress your spine.\n[30 minutes of mechanical traction - 97012]\nTherapist: And while you're on the traction table, I'm also going to set up unattended electrical stimulation on your lower back.\n[30 minutes of unattended e-stim - 97014]\nTherapist: Actually, I also want you doing some progressive resistance exercises with your arms while you're laying there. We're going to push hard for the last hour to get these therapeutic exercises in.\n[60 minutes of therapeutic exercises - 97110]"
+}

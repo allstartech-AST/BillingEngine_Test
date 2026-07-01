@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medexa — Billing Intelligence</title>
+  <link rel="stylesheet" href="/static/prototype.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-left">
+      <button type="button" class="icon-btn menu-btn" aria-label="Menu">☰</button>
+      <div class="logo">Medexa<span class="logo-dot">.</span></div>
+    </div>
+    <div class="search">Search patients or sessions...</div>
+    <div class="header-right">
+      <span class="icon-btn" title="AI assist">✨</span>
+      <span class="icon-btn" title="Notifications">🔔</span>
+      <span class="lang-pill">Eng</span>
+      <div class="clinician">
+        <span class="header-avatar">SM</span>
+        <span>Dr. Sarah Miller · Clinician</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="session-shell">
+    <div id="run-status" class="run-status live-run-status" role="status" aria-live="polite"></div>
+
+    <!-- Edit mode: CPT/ICD input + live cards -->
+    <div id="edit-mode">
+      <div class="session-top">
+        <div>
+          <div class="session-title-row">
+            <h1 class="session-title" id="session-title">Live Therapy Session</h1>
+            <span class="status-pill" id="status-pill">Live Session</span>
+          </div>
+          <div class="meta-row" id="meta-row"></div>
+        </div>
+      </div>
+
+      <div class="tabs-row dev-tabs">
+        <div class="tabs">
+          <button class="tab" id="tab-batch">Batch JSON</button>
+          <button class="tab active" id="tab-live">Live Session</button>
+          <button class="tab" id="tab-transcript">Transcript Feed</button>
+        </div>
+      </div>
+      <link rel="stylesheet" href="/static/css/styles.css">
+
+
+    <div class="two-pane-layout">
+      <div class="pane-left">
+        <div id="content" class="scroll-body">
+          <div class="loading">Loading session...</div>
+        </div>
+      </div>
+      
+      <div class="pane-right">
+        <div id="live-section" class="input-section">
+          <h2 class="input-heading">Live session (incremental billing)</h2>
+          <p class="input-hint">Add ICDs first. Detect one CPT at a time — end it with duration before detecting the next. The CPT code stays locked in the input until ended.</p>
+
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="live-patient-name" placeholder="Patient Name (e.g., John Doe)" style="flex: 1;" />
+            <input type="text" id="live-patient-id" placeholder="Patient ID (e.g., 12345)" style="width: 150px;" />
+            <select id="live-billing-rule" style="width: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;">
+              <option value="cms_8_minute">Medicare 8-Minute Rule</option>
+              <option value="ama_rule_of_8">AMA Rule of 8</option>
+            </select>
+            <button type="button" id="btn-live-start" class="btn-primary">Start session</button>
+          </div>
+
+          <div class="live-grid">
+            <label>ICD-10 <input type="text" id="live-icd" placeholder="M25.511, M54.50" /></label>
+            <button type="button" id="btn-live-icd" class="btn-demo">Add ICD</button>
+          </div>
+
+          <div class="live-grid">
+            <label>CPT code <input type="text" id="live-cpt" placeholder="97110" /></label>
+            <button type="button" id="btn-live-detect" class="btn-demo">Detect CPT</button>
+            <label>Duration (min) <input type="number" id="live-duration" value="16" min="0" step="1" /></label>
+            <button type="button" id="btn-live-end-cpt" class="btn-demo secondary">End CPT</button>
+          </div>
+
+          <div class="input-actions">
+            <button type="button" id="btn-live-end-session" class="btn-primary">End session</button>
+            <span id="live-session-id" class="file-name"></span>
+          </div>
+
+          <div class="demo-row">
+            <span class="demo-label">Demo script:</span>
+            <button type="button" id="btn-live-demo" class="btn-demo">Capture demo flow</button>
+          </div>
+        </div>
+
+        <div id="transcript-section" class="input-section" hidden>
+          <h2 class="input-heading">Transcript Feed (Sentence-by-Sentence)</h2>
+          <p class="input-hint">Paste your transcript, parse it, and feed sentences one by one to auto-detect codes.</p>
+
+          <textarea id="live-transcript" rows="6" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); padding: 10px;" placeholder="Therapist: Let's do some therapeutic exercises today."></textarea>
+          
+          <div class="input-actions" style="margin-top: 10px; display: flex; gap: 8px;">
+            <select id="transcript-billing-rule" style="flex: 1; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;">
+              <option value="cms_8_minute">Medicare 8-Minute Rule</option>
+              <option value="ama_rule_of_8">AMA Rule of 8</option>
+            </select>
+            <button type="button" id="btn-parse-sentences" class="btn-primary" style="flex: 2;">Parse Sentences</button>
+          </div>
+
+          <div id="sentence-feed-container" style="display: none; margin-top: 20px; border: 1px solid var(--border-color); padding: 15px; border-radius: var(--radius-md);">
+            <h3 style="margin-top: 0; font-size: 14px;">Next Sentence:</h3>
+            <p id="next-sentence-display" style="font-size: 14px; background: var(--bg-body); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); line-height: 1.4;"></p>
+            <div class="input-actions" style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
+              <button type="button" id="btn-feed-sentence" class="btn-primary" style="flex: 1;">Feed Sentence</button>
+              <span id="sentences-remaining" style="margin-left: 10px; color: var(--text-muted); font-size: 12px; font-weight: bold;"></span>
+            </div>
+          </div>
+        </div>
+
+        <div id="batch-section" class="input-section" hidden>
+          <h2 class="input-heading">Test a session JSON</h2>
+          <p class="input-hint">Paste your billing session below or choose a <code>.json</code> file, then click <strong>Run evaluation</strong>.</p>
+
+          <textarea id="json-paste" rows="10" placeholder='{
+      "client_info": { "client_name": "Jane Doe", "client_id": "PT-12345" },
+      "session_metadata": { "session_start": "2026-06-29T10:00:00Z", "session_end": "2026-06-29T11:00:00Z" },
+      "diagnoses": { "icd_1": "M54.50" },
+      "detected_cpt_codes": [
+        { "cpt_code": "97110", "sequence": 1, "timestamp_start": "00:00:00", "timestamp_end": "00:26:00" }
+      ],
+      "whole_transcript": "Therapeutic exercises today."
+    }'></textarea>
+
+          <div class="input-actions">
+            <select id="batch-billing-rule" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; margin-right: 8px;">
+              <option value="cms_8_minute">Medicare 8-Minute Rule</option>
+              <option value="ama_rule_of_8">AMA Rule of 8</option>
+            </select>
+            <button type="button" id="btn-run" class="btn-primary">Run evaluation</button>
+            <label class="btn-file">
+              Choose JSON file
+              <input type="file" id="file-input" accept=".json,application/json" hidden />
+            </label>
+            <span id="file-name-display" class="file-name"></span>
+          </div>
+        </div>
+      </div>
+    </div>     </div>
+
+      <div id="run-status-batch" class="run-status" role="status" aria-live="polite"></div>
+
+      <div class="demo-row">
+        <span class="demo-label">Or load a built-in demo:</span>
+        <button type="button" id="btn-load-stress" class="btn-demo">Stress test</button>
+        <button type="button" id="btn-load-capture" class="btn-demo secondary">Capture demo</button>
+      </div>
+    </div>
+
+    <div id="finalize-bar" class="finalize-bar" hidden>
+      <button type="button" id="btn-finalize" class="btn-primary btn-finalize">Finalize billing</button>
+    </div>
+    </div>
+
+    <!-- Review mode: patient header + billing summary (after finalize) -->
+    <div id="review-mode" class="finalized-view" hidden>
+      <div class="patient-banner">
+        <button type="button" id="btn-back" class="back-btn" aria-label="Back to session input">‹</button>
+        <div class="patient-avatar" id="patient-avatar">ST</div>
+        <div class="patient-details">
+          <h1 class="patient-name" id="patient-name">Samuel Thompson</h1>
+          <div class="patient-badges">
+            <span class="patient-badge"><strong>AGE/SEX</strong> 58 / Male</span>
+            <span class="patient-badge"><strong>WT</strong> 88 kg</span>
+            <span class="patient-badge"><strong>MRN</strong> <span id="patient-mrn">220486</span></span>
+            <span class="patient-badge insurance-badge"><span class="insurance-dot"></span> Medicare</span>
+          </div>
+        </div>
+        <div class="header-timer" id="session-timer">00:00</div>
+      </div>
+
+      <div class="review-heading">
+        <h2>Session Review</h2>
+        <p>Review and sign the session documentation below.</p>
+      </div>
+
+      <div class="tabs-row review-tabs">
+        <div class="tabs">
+          <button type="button" class="tab">SOAP Notes</button>
+          <button type="button" class="tab active">Billing Intelligence</button>
+          <button type="button" class="tab">Patient Summary</button>
+        </div>
+      </div>
+
+      <div id="review-content" class="scroll-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/main.js"></script>
+
+</body>
+</html>

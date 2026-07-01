@@ -1,0 +1,29 @@
+.two-pane-layout {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .pane-left {
+        flex: 1;
+        min-width: 0;
+      }
+      .pane-right {
+        width: 450px;
+        flex-shrink: 0;
+      }
+      .finalize-bar {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: auto;
+        padding: 15px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        z-index: 1000;
+      }
+      .finalized-view {
+        max-width: 800px;
+        margin: 0 auto;
+      }
