@@ -120,6 +120,7 @@ def on_sentence_fed(session_id: str, sentence: str, store: MetadataStore) -> Liv
                 )
                 _apply_icd_validation(row, state.icds, store)
                 _sync_row_messages(row)
+                
                 state.cpts.append(row)
                 added_cpts.append(cpt)
 
@@ -128,6 +129,10 @@ def on_sentence_fed(session_id: str, sentence: str, store: MetadataStore) -> Liv
         for row in state.cpts:
             _sync_row_messages(row)
         _refresh_conflicts(state, store)
+        
+        from app.engine.llm import launch_ai_enrichment_task
+        launch_ai_enrichment_task(session_id, store)
+        
         _apply_conflict_pending(state)
         _recalculate_units(state, store)
         save_session(state)

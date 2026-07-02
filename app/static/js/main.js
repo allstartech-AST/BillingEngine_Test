@@ -210,8 +210,17 @@ function renderUi(ui, onModifierAction) {
         <span>Duration: ${escapeHtml(h.duration_display)}</span>
         <span id="header-units-display">Unit(s): ${h.units_total}</span>`;
 
-  const eightMin = s.eight_minute_rule
-    ? '<span class="pill-green">8 Minute Rule</span>' : "";
+  let ruleLabel = "";
+  let ruleTooltip = "";
+  if (s.eight_minute_rule) {
+    if (s.billing_rule === "ama_rule_of_8") {
+      ruleLabel = '<span class="pill-green" style="background-color: var(--color-purple-light); color: var(--color-purple);">AMA Rule of 8</span>';
+      ruleTooltip = "AMA Rule of 8 (Time is NOT pooled)";
+    } else {
+      ruleLabel = '<span class="pill-green">CMS 8-Minute Rule</span>';
+      ruleTooltip = "Pooled 8-minute rule across timed CPTs";
+    }
+  }
 
   let html = `
         <div class="summary-row">
@@ -221,10 +230,10 @@ function renderUi(ui, onModifierAction) {
             ${s.threshold_note ? `<p class="summary-sub">${escapeHtml(s.threshold_note)}</p>` : ""}
           </div>
           <div class="summary-card">
-            <span class="info-icon" title="Pooled 8-minute rule across timed CPTs">i</span>
+            ${ruleTooltip ? `<span class="info-icon" title="${ruleTooltip}">i</span>` : ""}
             <h3>Session Units</h3>
             <p class="summary-value" id="summary-units-display">${s.session_units_total} Units</p>
-            ${eightMin}
+            ${ruleLabel}
           </div>
         </div>`;
 
@@ -366,13 +375,18 @@ function renderFinalizedBilling(finalize, ui) {
 
   const reviewContent = document.getElementById("review-content");
   const rows = finalize.lines.map(function (line) {
+    let unitsHtml = `<span class="unit-badge">${line.units}</span>`;
+    if (line.is_timed === false) {
+      unitsHtml = `<input type="number" class="manual-unit-input" data-cpt="${escapeHtml(line.cpt_code)}" value="${line.units}" min="0" style="width: 60px; padding: 4px; border: 2px solid var(--color-orange); border-radius: 4px; font-weight: bold; text-align: center;">`;
+    }
     return `
-          <tr>
+          <tr ${line.is_timed === false ? 'style="background-color: #fffbeb;"' : ''}>
             <td><a href="#" class="cpt-code-link" onclick="return false;">${escapeHtml(line.cpt_code)}</a></td>
             <td>${escapeHtml(line.description)}</td>
-            <td><span class="unit-badge">${line.units}</span></td>
+            <td>${(line.applied_modifiers && line.applied_modifiers.length) ? escapeHtml(line.applied_modifiers.join(", ")) : "None"}</td>
+            <td>${unitsHtml}</td>
             <td>${escapeHtml(line.duration_display)}</td>
-            <td>${escapeHtml(line.region)}</td>
+            <td><input type="text" class="region-input" data-cpt="${escapeHtml(line.cpt_code)}" value="${line.region === '--' ? '' : escapeHtml(line.region)}" placeholder="ex. spine, knee, head, etc" style="width: 100%; max-width: 150px; border: 1px solid var(--border); padding: 4px; border-radius: 4px;"></td>
           </tr>`;
   }).join("");
 
@@ -381,6 +395,7 @@ function renderFinalizedBilling(finalize, ui) {
           <tr class="rejected-row" style="opacity: 0.6; background-color: var(--bg-alt);">
             <td><span class="cpt-code-link">${escapeHtml(line.cpt_code)}</span></td>
             <td>${escapeHtml(line.description)} <strong style="color: var(--color-red);">(Rejected/Removed)</strong></td>
+            <td>${(line.applied_modifiers && line.applied_modifiers.length) ? escapeHtml(line.applied_modifiers.join(", ")) : "None"}</td>
             <td><span class="unit-badge" style="background: #999;">0</span></td>
             <td>${escapeHtml(line.duration_display)}</td>
             <td>${escapeHtml(line.region)}</td>
@@ -397,6 +412,7 @@ function renderFinalizedBilling(finalize, ui) {
                 <tr>
                   <th>Code</th>
                   <th>Description</th>
+                  <th>Modifiers</th>
                   <th>Units</th>
                   <th>Duration</th>
                   <th>Region</th>
@@ -418,7 +434,7 @@ function renderFinalizedBilling(finalize, ui) {
             </div>
             <div class="stat-card stat-green">
               <h3>Billable Units</h3>
-              <p class="stat-value">${finalize.billable_units_total}</p>
+              <p class="stat-value" id="finalize-stat-units">${finalize.billable_units_total}</p>
             </div>
             <div class="stat-card stat-yellow">
               <h3>CPT Codes</h3>
@@ -435,6 +451,7 @@ function renderFinalizedBilling(finalize, ui) {
                 <tr>
                   <th>Code</th>
                   <th>Description</th>
+                  <th>Modifiers</th>
                   <th>Units</th>
                   <th>Duration</th>
                   <th>Region</th>
@@ -443,8 +460,8 @@ function renderFinalizedBilling(finalize, ui) {
               <tbody>
                 ${rows}
                 <tr class="total-row">
-                  <td colspan="2"><strong>Total</strong></td>
-                  <td><span class="unit-badge">${finalize.billable_units_total}</span></td>
+                  <td colspan="3"><strong>Total</strong></td>
+                  <td><span class="unit-badge" id="finalize-table-total-units">${finalize.billable_units_total}</span></td>
                   <td colspan="2">${escapeHtml(finalize.total_duration_display)}</td>
                 </tr>
               </tbody>
@@ -458,6 +475,25 @@ function renderFinalizedBilling(finalize, ui) {
   document.getElementById("btn-sign-document").addEventListener("click", function () {
     setStatus("Document signed and finalized (prototype).", "success");
     document.getElementById("btn-sign-document").disabled = true;
+  });
+
+  const manualInputs = reviewContent.querySelectorAll(".manual-unit-input");
+  manualInputs.forEach(input => {
+    input.addEventListener("input", function() {
+      let total = 0;
+      finalize.lines.forEach(line => {
+        if (line.is_timed !== false) {
+           total += line.units;
+        }
+      });
+      manualInputs.forEach(inp => {
+        total += (parseInt(inp.value, 10) || 0);
+      });
+      const statUnits = document.getElementById("finalize-stat-units");
+      const tableTotalUnits = document.getElementById("finalize-table-total-units");
+      if (statUnits) statUnits.textContent = total;
+      if (tableTotalUnits) tableTotalUnits.textContent = total;
+    });
   });
 }
 
@@ -852,6 +888,15 @@ function updateTimerUI(cpt, secondsElapsed) {
 
 async function liveFinalize() {
   await ensureLiveSession();
+  
+  if (lastLiveUi && lastLiveUi.cpt_cards) {
+    const incomplete = lastLiveUi.cpt_cards.find(c => c.duration_display === "—");
+    if (incomplete) {
+      setStatus("Cannot finalize yet: Please stop all active timers and provide durations/units for all detected codes.", "error");
+      return;
+    }
+  }
+
   try {
     const data = await liveApi("/live/session/" + liveSessionId + "/end", "POST");
     handleLiveResponse(data);

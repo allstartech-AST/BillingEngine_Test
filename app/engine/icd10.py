@@ -232,7 +232,7 @@ def validate_medical_necessity(
                 cpt_text,
                 icd_semantic_text(matched, store, labels),
             )
-            guidance = f"Submitted ICD {matched} is on the CMS crosswalk for {cpt}."
+            guidance = f"Detected ICD {matched} is on the CMS crosswalk for {cpt}."
             if alts_on_claim:
                 alt_labels = ", ".join(alts_on_claim[:3])
                 guidance += (

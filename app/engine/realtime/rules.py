@@ -86,7 +86,7 @@ def icd_pending_for_cpt(
     store: MetadataStore,
 ) -> tuple[bool, str]:
     if not icds:
-        return True, "No ICD-10 codes on session — add diagnoses before billing."
+        return True, "No ICD-10 codes detected on session — therapist should review and add diagnoses before billing."
     results, pending = validate_medical_necessity({cpt_code}, icds, store)
     if not results:
         return True, f"No medical necessity result for {cpt_code}."
@@ -94,9 +94,9 @@ def icd_pending_for_cpt(
     if result.medical_necessity in ("valid", "valid_no_crosswalk"):
         return False, result.guidance or ""
     if result.medical_necessity == "pending_icd_review":
-        return True, result.guidance or "ICD medical necessity requires therapist review."
+        return True, result.guidance or "Detected ICDs require therapist review for medical necessity."
     if result.medical_necessity == "invalid":
-        return True, result.guidance or f"Submitted ICDs do not support {cpt_code}."
+        return True, result.guidance or f"Detected ICDs do not support {cpt_code} - therapist should review."
     return cpt_code in pending, result.guidance or ""
 
 

@@ -42,6 +42,10 @@ class LiveCptRow(BaseModel):
     removal_reason: str = ""
     message: str = ""
     applied_modifiers: list[str] = Field(default_factory=list)
+    mue_note: str = ""
+    ai_supported: bool | None = None
+    ai_reasoning: str = ""
+    region: str = "--"
 
 
 class LiveSessionState(BaseModel):
@@ -96,6 +100,8 @@ class FinalizeCptLine(BaseModel):
     units: int
     duration_display: str
     region: str = "--"
+    is_timed: bool = True
+    applied_modifiers: list[str] = Field(default_factory=list)
 
 
 class FinalizeDisplay(BaseModel):

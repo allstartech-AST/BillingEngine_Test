@@ -398,6 +398,7 @@ def build_ui_display(
             session_time_display=format_session_duration(total_timeline_minutes),
             session_units_total=units_display_total,
             eight_minute_rule=has_eight_minute,
+            billing_rule=payload.billing_rule,
             threshold_note="",
         ),
         icd_cards=icd_cards,

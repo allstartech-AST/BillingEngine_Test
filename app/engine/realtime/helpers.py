@@ -205,10 +205,15 @@ def _recalculate_units(state: LiveSessionState, store: MetadataStore) -> None:
             continue
         res = by_cpt.get(row.cpt_code)
         if res:
-            capped, _ = apply_mue_cap(row.cpt_code, res.units, store)
+            capped, limit = apply_mue_cap(row.cpt_code, res.units, store)
             row.units = capped
+            if capped < res.units and limit is not None:
+                row.mue_note = f"MUE limit {limit} (remaining minutes discarded)"
+            else:
+                row.mue_note = ""
         else:
             row.units = 0
+            row.mue_note = ""
             
         if row.cpt_code in pending_cpts and "ncci_bundling" in row.pending_reasons:
             row.units = 0
@@ -226,7 +231,9 @@ def _refresh_conflicts(state: LiveSessionState, store: MetadataStore) -> None:
             row.lifecycle = "removed"
             row.billing_status = "removed"
             row.units = 0
-            issue = next((i for i in issues if i.code == cpt), None)
+            issue = next((i for i in issues if i.code == cpt and i.severity == "error"), None)
+            if not issue:
+                issue = next((i for i in issues if i.code == cpt), None)
             if issue:
                 row.removal_reason = _issue_removal_reason(issue)
                 row.message = issue.message

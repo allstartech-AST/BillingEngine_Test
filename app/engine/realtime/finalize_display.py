@@ -18,8 +18,6 @@ def _short_description(cpt_code: str, store: MetadataStore) -> str:
 def _display_units(row: LiveCptRow) -> int:
     if row.lifecycle != "completed":
         return 0
-    if not row.is_timed:
-        return 1
     return row.units
 
 
@@ -46,12 +44,18 @@ def build_finalize_display(state: LiveSessionState, store: MetadataStore) -> Fin
             total_minutes += row.duration_minutes_exact
             billable_units += units
         
+        mods = list(row.applied_modifiers)
+        if row.mue_note:
+            mods.append(row.mue_note)
+            
         line = FinalizeCptLine(
             cpt_code=row.cpt_code,
             description=_short_description(row.cpt_code, store),
             units=units,
             duration_display=duration_display,
-            region="--",
+            region=row.region,
+            is_timed=row.is_timed,
+            applied_modifiers=mods,
         )
         if row.lifecycle == "removed":
             rejected_lines.append(line)

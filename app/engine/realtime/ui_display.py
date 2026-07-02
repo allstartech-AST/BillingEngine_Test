@@ -225,10 +225,20 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
             if applies_here:
                 badge = "Modifier 59 Required"
                 modifiers = list(MODIFIERS)
-                conflict_message = (
-                    f"NCCI bundle with Column 1 code {conflict_with} (modifier indicator {indicator}). "
-                    f"If this was a distinct separate service, apply {modifier_labels} to {row.cpt_code}."
-                )
+                ai_mods = []
+                if ncci.ai_enriched:
+                    for rec in ncci.recommendations:
+                        if rec.action == "apply_modifier" and rec.modifiers:
+                            ai_mods = rec.modifiers
+                            conflict_message = rec.summary
+                            break
+                if ai_mods:
+                    modifiers = ai_mods
+                else:
+                    conflict_message = (
+                        f"NCCI bundle with Column 1 code {conflict_with} (modifier indicator {indicator}). "
+                        f"If this was a distinct separate service, apply {modifier_labels} to {row.cpt_code}."
+                    )
             else:
                 badge = badge or "Review Required"
                 col2 = ncci.column_two_code or conflict_with
@@ -270,6 +280,14 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
             )
 
         if is_detected:
+            suggestions.append(
+                UiSuggestion(
+                    type="cpt_detected",
+                    severity="action_required",
+                    summary="New code detected in transcript. Click start when action begins.",
+                )
+            )
+        elif row.lifecycle == "running":
             suggestions.append(
                 UiSuggestion(
                     type="awaiting_end",
@@ -343,6 +361,7 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
             session_time_display=format_session_duration(total_minutes),
             session_units_total=units_total,
             eight_minute_rule=has_eight_minute,
+            billing_rule=state.billing_rule,
             threshold_note=pool_note or state.session_message,
         ),
         icd_cards=icd_cards,

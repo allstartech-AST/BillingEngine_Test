@@ -81,6 +81,10 @@ def on_cpt_detected(session_id: str, cpt_code: str, store: MetadataStore) -> Liv
 
     state.cpts.append(row)
     _refresh_conflicts(state, store)
+    
+    from app.engine.llm import launch_ai_enrichment_task
+    launch_ai_enrichment_task(session_id, store)
+    
     _apply_conflict_pending(state)
     _recalculate_units(state, store)
     for r in state.cpts:

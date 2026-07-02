@@ -51,11 +51,12 @@ def check_mue_zero(
                 )
             )
         elif mue.get("adjudication") == 3:
+            cpt_name = store.medexa.get(cpt, {}).get("label") or store.description(cpt) or cpt
             issues.append(
                 Issue(
                     severity="info",
                     code=cpt,
-                    message=f"MUE adjudication indicator 3 present for {cpt}; applying numeric limit only.",
+                    message=f"MUE adjudication indicator 3 present for {cpt_name}; maximum limit is {limit}.",
                 )
             )
 

@@ -91,6 +91,7 @@ class BillingConflict(BaseModel):
     issue: str
     recommendations: list[ConflictRecommendation]
     modifier_indicator: str | None = None
+    ai_enriched: bool = False
 
 
 class TranscriptCptSupport(BaseModel):
@@ -305,6 +306,7 @@ class UiSummaryCards(BaseModel):
     session_time_display: str
     session_units_total: int
     eight_minute_rule: bool
+    billing_rule: str = "cms_8_minute"
     threshold_note: str = ""
 
 
