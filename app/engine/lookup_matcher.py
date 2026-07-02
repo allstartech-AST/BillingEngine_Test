@@ -12,6 +12,7 @@ _GENERIC_ACTION_VERBS = {
     "do", "perform", "work", "complete", "finish", "start", "begin",
     "continue", "apply", "place", "transition", "initiate", "deliver",
     "provide", "conduct", "give", "use", "administer", "execute",
+    "put", "run", "spend", "practice",
 }
 
 _IRREGULAR_VERBS = {
@@ -20,6 +21,8 @@ _IRREGULAR_VERBS = {
     "went": "go", "gone": "go",
     "got": "get", "gotten": "get",
     "put": "put", "putting": "put",
+    "ran": "run", "running": "run",
+    "spent": "spend", "spending": "spend",
 }
 
 _WORD_RE = re.compile(r"[a-z0-9']+")

@@ -1,202 +1,319 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Medexa — Billing Intelligence</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ast: {
+              bg: '#f8fafc',
+              navy: '#1e293b',
+              blue: '#3b82f6',
+              'dark-blue': '#2563eb',
+              tint: '#eff6ff'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
   <link rel="stylesheet" href="/static/prototype.css" />
 </head>
+
 <body>
-  <header class="app-header">
-    <div class="header-left">
-      <button type="button" class="icon-btn menu-btn" aria-label="Menu">☰</button>
-      <div class="logo">Medexa<span class="logo-dot">.</span></div>
-    </div>
-    <div class="search">Search patients or sessions...</div>
-    <div class="header-right">
-      <span class="icon-btn" title="AI assist">✨</span>
-      <span class="icon-btn" title="Notifications">🔔</span>
-      <span class="lang-pill">Eng</span>
-      <div class="clinician">
-        <span class="header-avatar">SM</span>
-        <span>Dr. Sarah Miller · Clinician</span>
-      </div>
-    </div>
-  </header>
-
-  <div class="session-shell">
-    <div id="run-status" class="run-status live-run-status" role="status" aria-live="polite"></div>
-
-    <!-- Edit mode: CPT/ICD input + live cards -->
-    <div id="edit-mode">
-      <div class="session-top">
-        <div>
-          <div class="session-title-row">
-            <h1 class="session-title" id="session-title">Live Therapy Session</h1>
-            <span class="status-pill" id="status-pill">Live Session</span>
-          </div>
-          <div class="meta-row" id="meta-row"></div>
+  <div id="root">
+    <div class="min-h-screen bg-ast-bg flex flex-col">
+      <header class="h-16 bg-white border-b border-slate-200 flex items-center px-4 gap-3 sticky top-0 z-20 shadow-sm">
+        <button class="p-1.5 rounded-md hover:bg-slate-100 transition-colors flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide lucide-menu text-slate-500" aria-hidden="true">
+            <path d="M4 5h16"></path>
+            <path d="M4 12h16"></path>
+            <path d="M4 19h16"></path>
+          </svg>
+        </button>
+        <button class="font-extrabold text-xl flex-shrink-0 tracking-tight hover:opacity-80 transition-opacity">
+          <span class="text-ast-navy">Medexa</span><span class="text-ast-blue">.</span>
+        </button>
+        <div class="hidden sm:block relative flex-1 max-w-72 mx-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide lucide-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            aria-hidden="true">
+            <path d="m21 21-4.34-4.34"></path>
+            <circle cx="11" cy="11" r="8"></circle>
+          </svg>
+          <input placeholder="Search patients or sessions..."
+            class="w-full pl-8 pr-3 py-1.5 rounded-full border border-slate-200 bg-ast-bg text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 transition-colors"
+            type="text">
         </div>
-      </div>
-
-      <div class="tabs-row dev-tabs">
-        <div class="tabs">
-          <button class="tab" id="tab-batch">Batch JSON</button>
-          <button class="tab active" id="tab-live">Live Session</button>
-          <button class="tab" id="tab-transcript">Transcript Feed</button>
+        <div class="ml-auto flex items-center gap-0.5">
+          <button title="Ask Medexa AI" class="p-2 rounded-md hover:bg-ast-tint transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="lucide lucide-sparkles text-ast-blue" aria-hidden="true">
+              <path
+                d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z">
+              </path>
+              <path d="M20 2v4"></path>
+              <path d="M22 4h-4"></path>
+              <circle cx="4" cy="20" r="2"></circle>
+            </svg>
+          </button>
+          <button class="p-2 rounded-md hover:bg-slate-100 transition-colors relative">
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="lucide lucide-bell text-slate-500" aria-hidden="true">
+              <path d="M10.268 21a2 2 0 0 0 3.464 0"></path>
+              <path
+                d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326">
+              </path>
+            </svg>
+            <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-ast-blue"></span>
+          </button>
+          <div class="relative">
+            <button
+              class="flex items-center gap-1 text-xs text-slate-500 hover:bg-slate-100 rounded-md px-2.5 py-1.5 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="lucide lucide-languages text-slate-400" aria-hidden="true">
+                <path d="m5 8 6 6"></path>
+                <path d="m4 14 6-6 2-3"></path>
+                <path d="M2 5h12"></path>
+                <path d="M7 2h1"></path>
+                <path d="m22 22-5-10-5 10"></path>
+                <path d="M14 18h6"></path>
+              </svg>Eng<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="lucide lucide-chevron-down text-slate-400" aria-hidden="true">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+          </div>
+          <button class="flex items-center gap-2 hover:bg-slate-100 rounded-lg px-2 py-1.5 transition-colors ml-1">
+            <div
+              class="w-7 h-7 rounded-full bg-gradient-to-br from-ast-blue to-ast-dark-blue flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ring-2 ring-slate-200 shadow-sm">
+              SM</div>
+            <div class="text-left hidden sm:block">
+              <p class="text-xs font-semibold text-ast-navy leading-tight">Dr. Sarah Miller</p>
+              <p class="text-[10px] text-slate-400 leading-tight">Clinician</p>
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="lucide lucide-chevron-down text-slate-400 hidden sm:block" aria-hidden="true">
+              <path d="m6 9 6 6 6-6"></path>
+            </svg>
+          </button>
         </div>
-      </div>
-      <link rel="stylesheet" href="/static/css/styles.css">
+      </header>
 
+      <div id="edit-mode" class="max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 pt-2 pb-6">
 
-    <div class="two-pane-layout">
-      <div class="pane-left">
-        <div id="content" class="scroll-body">
-          <div class="loading">Loading session...</div>
-        </div>
-      </div>
-      
-      <div class="pane-right">
-        <div id="live-section" class="input-section">
-          <h2 class="input-heading">Live session (incremental billing)</h2>
-          <p class="input-hint">Add ICDs first. Detect one CPT at a time — end it with duration before detecting the next. The CPT code stays locked in the input until ended.</p>
-
-          <div style="display: flex; gap: 8px;">
-            <input type="text" id="live-patient-name" placeholder="Patient Name (e.g., John Doe)" style="flex: 1;" />
-            <input type="text" id="live-patient-id" placeholder="Patient ID (e.g., 12345)" style="width: 150px;" />
-            <select id="live-billing-rule" style="width: 200px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;">
-              <option value="cms_8_minute">Medicare 8-Minute Rule</option>
-              <option value="ama_rule_of_8">AMA Rule of 8</option>
-            </select>
-            <button type="button" id="btn-live-start" class="btn-primary">Start session</button>
+        <!-- Greeting Card (from user code) -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-slate-200/60 px-6 py-4 mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 sm:gap-7">
+          <div>
+            <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Wednesday, Jul 1, 2026
+            </p>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-ast-navy leading-[1.1] tracking-tight">Good
+              Evening, <span class="text-ast-blue">Dr. Sarah</span></h1>
+            <p class="text-xs text-slate-500 mt-1">Ready to parse a transcript?</p>
           </div>
 
-          <div class="live-grid">
-            <label>ICD-10 <input type="text" id="live-icd" placeholder="M25.511, M54.50" /></label>
-            <button type="button" id="btn-live-icd" class="btn-demo">Add ICD</button>
-          </div>
-
-          <div class="live-grid">
-            <label>CPT code <input type="text" id="live-cpt" placeholder="97110" /></label>
-            <button type="button" id="btn-live-detect" class="btn-demo">Detect CPT</button>
-            <label>Duration (min) <input type="number" id="live-duration" value="16" min="0" step="1" /></label>
-            <button type="button" id="btn-live-end-cpt" class="btn-demo secondary">End CPT</button>
-          </div>
-
-          <div class="input-actions">
-            <button type="button" id="btn-live-end-session" class="btn-primary">End session</button>
-            <span id="live-session-id" class="file-name"></span>
-          </div>
-
-          <div class="demo-row">
-            <span class="demo-label">Demo script:</span>
-            <button type="button" id="btn-live-demo" class="btn-demo">Capture demo flow</button>
+          <div id="session-top-meta" class="flex flex-col gap-2 items-start sm:items-end">
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-bold text-ast-navy" id="session-title">Live Therapy Session</h1>
+              <span
+                class="text-[10px] font-bold bg-ast-tint text-ast-blue border border-ast-blue/10 rounded-full px-2.5 py-1 uppercase tracking-wide"
+                id="status-pill">Live Session</span>
+            </div>
+            <div class="text-xs font-medium text-slate-500 flex flex-wrap gap-3" id="meta-row"></div>
           </div>
         </div>
 
-        <div id="transcript-section" class="input-section" hidden>
-          <h2 class="input-heading">Transcript Feed (Sentence-by-Sentence)</h2>
-          <p class="input-hint">Paste your transcript, parse it, and feed sentences one by one to auto-detect codes.</p>
+        <!-- run-status wrapper moved here -->
+        <div class="w-full relative z-10 mb-3">
+          <div id="run-status" class="run-status" role="status" aria-live="polite"></div>
+        </div>
 
-          <textarea id="live-transcript" rows="6" style="width: 100%; border-radius: 8px; border: 1px solid var(--border-color); padding: 10px;" placeholder="Therapist: Let's do some therapeutic exercises today."></textarea>
-          
-          <div class="input-actions" style="margin-top: 10px; display: flex; gap: 8px;">
-            <select id="transcript-billing-rule" style="flex: 1; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px;">
-              <option value="cms_8_minute">Medicare 8-Minute Rule</option>
-              <option value="ama_rule_of_8">AMA Rule of 8</option>
-            </select>
-            <button type="button" id="btn-parse-sentences" class="btn-primary" style="flex: 2;">Parse Sentences</button>
+        <div class="flex flex-col md:flex-row gap-8 items-start">
+          <!-- Left Content Area -->
+          <div class="flex-1 w-full relative">
+            <div id="content" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-5 min-h-[500px]">
+              <div class="loading text-sm text-slate-500 flex items-center justify-center gap-2 h-full py-20">
+                <svg class="animate-spin h-5 w-5 text-ast-blue" xmlns="http://www.w3.org/2000/svg" fill="none"
+                  viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                  </path>
+                </svg>
+                Waiting for session to begin...
+              </div>
+            </div>
           </div>
 
-          <div id="sentence-feed-container" style="display: none; margin-top: 20px; border: 1px solid var(--border-color); padding: 15px; border-radius: var(--radius-md);">
-            <h3 style="margin-top: 0; font-size: 14px;">Next Sentence:</h3>
-            <p id="next-sentence-display" style="font-size: 14px; background: var(--bg-body); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); line-height: 1.4;"></p>
-            <div class="input-actions" style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between;">
-              <button type="button" id="btn-feed-sentence" class="btn-primary" style="flex: 1;">Feed Sentence</button>
-              <span id="sentences-remaining" style="margin-left: 10px; color: var(--text-muted); font-size: 12px; font-weight: bold;"></span>
+          <!-- Right Input Area -->
+          <div class="w-full md:w-[480px] flex-shrink-0 sticky top-24">
+            <div id="transcript-section" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-5">
+              <h2 class="text-base font-bold text-ast-navy mb-1 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  class="lucide lucide-mic text-ast-blue">
+                  <path d="M12 19v3"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <rect x="9" y="2" width="6" height="13" rx="3"></rect>
+                </svg>
+                Transcript Feed
+              </h2>
+              <p class="text-[11px] text-slate-400 mb-4 leading-relaxed">Paste your transcript, parse it, and feed
+                sentences one by one to auto-detect codes.</p>
+
+              <div class="flex gap-2 mb-3">
+                <input type="text" id="live-patient-name" placeholder="Patient Name (e.g., John Doe)"
+                  class="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50" />
+                <input type="text" id="live-patient-id" placeholder="ID (12345)"
+                  class="w-24 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50" />
+              </div>
+
+              <textarea id="live-transcript" rows="3"
+                class="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50 mb-3 resize-none"
+                placeholder="Therapist: Let's do some therapeutic exercises today."></textarea>
+
+              <div class="flex gap-2 mb-4">
+                <select id="transcript-billing-rule"
+                  class="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50">
+                  <option value="cms_8_minute">Medicare 8-Minute</option>
+                  <option value="ama_rule_of_8">AMA Rule of 8</option>
+                </select>
+                <button type="button" id="btn-parse-sentences"
+                  class="bg-ast-navy hover:bg-[#141743] text-white rounded-lg text-xs font-bold px-4 transition-colors shadow-sm whitespace-nowrap">Parse
+                  Sentences</button>
+              </div>
+
+              <div id="sentence-feed-container" style="display: none;"
+                class="mb-4 border border-slate-200 p-4 rounded-xl bg-slate-50/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                <h3 id="next-sentence-title" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Next Sentence:</h3>
+                <p id="next-sentence-display"
+                  class="bg-white p-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed mb-3 shadow-[0_1px_2px_rgba(0,0,0,0.02)] min-h-[40px]">
+                </p>
+                <div class="flex items-center justify-between">
+                  <button type="button" id="btn-feed-sentence"
+                    class="bg-ast-blue hover:bg-ast-dark-blue text-white rounded-lg text-xs font-bold py-2 px-4 transition-colors shadow-sm shadow-ast-blue/20 flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                      class="lucide lucide-play">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    Feed
+                  </button>
+                  <span id="sentences-remaining"
+                    class="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-200"></span>
+                </div>
+              </div>
+
+              <div id="fed-sentences"
+                class="max-h-[300px] overflow-y-auto empty:hidden bg-slate-50/50 rounded-lg p-2 text-xs border border-slate-100">
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div id="batch-section" class="input-section" hidden>
-          <h2 class="input-heading">Test a session JSON</h2>
-          <p class="input-hint">Paste your billing session below or choose a <code>.json</code> file, then click <strong>Run evaluation</strong>.</p>
+      <!-- Finalize Bar -->
+      <div id="finalize-bar" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50" hidden>
+        <button type="button" id="btn-finalize"
+          class="bg-ast-navy hover:bg-[#141743] text-white rounded-full font-bold px-8 py-3.5 transition-all shadow-xl shadow-ast-navy/30 flex items-center gap-2 text-sm border border-slate-800">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide lucide-check-circle-2 text-ast-blue">
+            <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path>
+            <path d="m9 12 2 2 4-4"></path>
+          </svg>
+          Finalize Billing
+        </button>
+      </div>
 
-          <textarea id="json-paste" rows="10" placeholder='{
-      "client_info": { "client_name": "Jane Doe", "client_id": "PT-12345" },
-      "session_metadata": { "session_start": "2026-06-29T10:00:00Z", "session_end": "2026-06-29T11:00:00Z" },
-      "diagnoses": { "icd_1": "M54.50" },
-      "detected_cpt_codes": [
-        { "cpt_code": "97110", "sequence": 1, "timestamp_start": "00:00:00", "timestamp_end": "00:26:00" }
-      ],
-      "whole_transcript": "Therapeutic exercises today."
-    }'></textarea>
+      <!-- REVIEW MODE (Finalized) -->
+      <div id="review-mode" class="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6" hidden>
 
-          <div class="input-actions">
-            <select id="batch-billing-rule" style="padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; margin-right: 8px;">
-              <option value="cms_8_minute">Medicare 8-Minute Rule</option>
-              <option value="ama_rule_of_8">AMA Rule of 8</option>
-            </select>
-            <button type="button" id="btn-run" class="btn-primary">Run evaluation</button>
-            <label class="btn-file">
-              Choose JSON file
-              <input type="file" id="file-input" accept=".json,application/json" hidden />
-            </label>
-            <span id="file-name-display" class="file-name"></span>
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-center gap-4">
+            <button type="button" id="btn-back"
+              class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors border border-transparent hover:border-slate-200"
+              aria-label="Back to session input">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <div
+              class="w-12 h-12 rounded-full bg-gradient-to-br from-ast-blue to-ast-dark-blue flex items-center justify-center text-lg font-bold text-white shadow-inner"
+              id="patient-avatar">ST</div>
+            <div>
+              <h1 class="text-xl font-bold text-ast-navy" id="patient-name">Samuel Thompson</h1>
+              <div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                <span class="text-slate-500"><strong>AGE/SEX</strong> 58 / Male</span>
+                <span class="text-slate-300">•</span>
+                <span class="text-slate-500"><strong>WT</strong> 88 kg</span>
+                <span class="text-slate-300">•</span>
+                <span class="text-slate-500"><strong>MRN</strong> <span id="patient-mrn"
+                    class="font-mono bg-slate-50 px-1 rounded">220486</span></span>
+                <span
+                  class="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 border border-blue-100/60 ml-2 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Medicare
+                </span>
+              </div>
+            </div>
+          </div>
+          <div
+            class="bg-slate-50/80 px-5 py-2.5 rounded-xl border border-slate-200 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 text-center">Session Time</p>
+            <div class="text-xl font-mono font-bold text-ast-navy text-center" id="session-timer">00:00</div>
           </div>
         </div>
-      </div>
-    </div>     </div>
 
-      <div id="run-status-batch" class="run-status" role="status" aria-live="polite"></div>
-
-      <div class="demo-row">
-        <span class="demo-label">Or load a built-in demo:</span>
-        <button type="button" id="btn-load-stress" class="btn-demo">Stress test</button>
-        <button type="button" id="btn-load-capture" class="btn-demo secondary">Capture demo</button>
-      </div>
-    </div>
-
-    <div id="finalize-bar" class="finalize-bar" hidden>
-      <button type="button" id="btn-finalize" class="btn-primary btn-finalize">Finalize billing</button>
-    </div>
-    </div>
-
-    <!-- Review mode: patient header + billing summary (after finalize) -->
-    <div id="review-mode" class="finalized-view" hidden>
-      <div class="patient-banner">
-        <button type="button" id="btn-back" class="back-btn" aria-label="Back to session input">‹</button>
-        <div class="patient-avatar" id="patient-avatar">ST</div>
-        <div class="patient-details">
-          <h1 class="patient-name" id="patient-name">Samuel Thompson</h1>
-          <div class="patient-badges">
-            <span class="patient-badge"><strong>AGE/SEX</strong> 58 / Male</span>
-            <span class="patient-badge"><strong>WT</strong> 88 kg</span>
-            <span class="patient-badge"><strong>MRN</strong> <span id="patient-mrn">220486</span></span>
-            <span class="patient-badge insurance-badge"><span class="insurance-dot"></span> Medicare</span>
-          </div>
+        <!-- run-status wrapper for review mode -->
+        <div class="w-full relative z-10 mb-5">
+          <div class="run-status" role="status" aria-live="polite"></div>
         </div>
-        <div class="header-timer" id="session-timer">00:00</div>
-      </div>
 
-      <div class="review-heading">
-        <h2>Session Review</h2>
-        <p>Review and sign the session documentation below.</p>
-      </div>
+        <div class="mb-5 px-1">
+          <h2 class="text-2xl font-extrabold text-ast-navy tracking-tight">Session Review</h2>
+          <p class="text-sm text-slate-500 mt-1">Review and sign the finalized session documentation below.</p>
+        </div>
 
-      <div class="tabs-row review-tabs">
-        <div class="tabs">
-          <button type="button" class="tab">SOAP Notes</button>
-          <button type="button" class="tab active">Billing Intelligence</button>
-          <button type="button" class="tab">Patient Summary</button>
+        <div class="flex gap-6 border-b border-slate-200 mb-6 px-1">
+          <button type="button"
+            class="text-sm font-bold text-slate-400 hover:text-slate-600 pb-3 border-b-2 border-transparent transition-colors">SOAP
+            Notes</button>
+          <button type="button"
+            class="text-sm font-bold text-ast-blue border-b-2 border-ast-blue pb-3 transition-colors">Billing
+            Intelligence</button>
+          <button type="button"
+            class="text-sm font-bold text-slate-400 hover:text-slate-600 pb-3 border-b-2 border-transparent transition-colors">Patient
+            Summary</button>
+        </div>
+
+        <div id="review-content" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 min-h-[400px]">
         </div>
       </div>
 
-      <div id="review-content" class="scroll-body"></div>
     </div>
   </div>
 
   <script src="/static/js/main.js"></script>
-
 </body>
+
 </html>

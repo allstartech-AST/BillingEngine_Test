@@ -33,7 +33,8 @@ def check_mue_zero(
             )
         elif limit == 0:
             removed.add(cpt)
-            detail = f"MUE limit is 0 for {cpt}; not billable."
+            cpt_name = store.medexa.get(cpt, {}).get("label") or store.description(cpt) or cpt
+            detail = f"MUE limit for {cpt_name} is zero."
             removed_records.append(
                 RemovedCode(
                     cpt_code=cpt,
