@@ -245,7 +245,7 @@
       </div>
 
       <!-- REVIEW MODE (Finalized) -->
-      <div id="review-mode" class="max-w-5xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6" hidden>
+      <div id="review-mode" class="max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6" hidden>
 
         <div
           class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -306,13 +306,63 @@
             Summary</button>
         </div>
 
-        <div id="review-content" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 min-h-[400px]">
+        <div id="review-layout" class="flex flex-col xl:flex-row gap-6 items-start">
+          <div id="review-content-wrapper" class="flex-1 w-full min-w-0">
+            <div id="review-content" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 min-h-[400px]">
+            </div>
+          </div>
+
+          <aside id="llm-unit-calculator-panel"
+            class="w-full xl:w-[420px] flex-shrink-0 xl:sticky xl:top-24"
+            aria-label="LLM Unit Calculator">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-5">
+              <div class="mb-3 flex items-start justify-between gap-2">
+                <div>
+                  <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Standalone Utility</p>
+                  <h3 class="text-base font-extrabold text-ast-navy">LLM Unit Calculator</h3>
+                  <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">Enter CPT codes and durations to calculate billable units via Gemini.</p>
+                </div>
+                <button type="button" id="btn-llm-reset"
+                  class="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                  title="Reset calculator">
+                  Reset
+                </button>
+              </div>
+              <div id="llm-rule-selector" class="mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
+                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Timing Rule</p>
+                <div class="flex flex-col gap-2 text-xs font-medium text-slate-700">
+                  <label class="inline-flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="llm-billing-rule" value="cms_8_minute" checked
+                      class="h-3.5 w-3.5 border-slate-300 text-ast-blue focus:ring-ast-blue/30" />
+                    Medicare 8-Minute Rule
+                  </label>
+                  <label class="inline-flex cursor-pointer items-center gap-2">
+                    <input type="radio" name="llm-billing-rule" value="ama_rule_of_8"
+                      class="h-3.5 w-3.5 border-slate-300 text-ast-blue focus:ring-ast-blue/30" />
+                    AMA Rule of Eight
+                  </label>
+                </div>
+              </div>
+              <div id="llm-editable-rows" class="space-y-2 mb-3"></div>
+              <button type="button" id="btn-llm-add-row"
+                class="mb-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50">
+                + Add CPT Row
+              </button>
+              <button type="button" id="btn-llm-calculate"
+                class="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-ast-blue/30 bg-ast-tint px-4 py-2.5 text-xs font-bold text-ast-blue transition-colors hover:bg-ast-blue/10 disabled:cursor-not-allowed disabled:opacity-60">
+                <span id="btn-llm-calculate-label">Calculate Units</span>
+              </button>
+              <div id="llm-panel-results" class="mt-3 space-y-3" aria-live="polite"></div>
+            </div>
+          </aside>
         </div>
       </div>
 
     </div>
   </div>
 
+  <script src="/static/js/summary-validation.js"></script>
+  <script src="/static/js/llm-unit-calculator.js"></script>
   <script src="/static/js/main.js"></script>
 </body>
 

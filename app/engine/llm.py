@@ -3,9 +3,9 @@ import os
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from app.config import gemini_api_key, gemini_audit_model, load_env_files
 
-load_dotenv()
+load_env_files()
 
 # We will initialize the client lazily
 _client = None
@@ -17,7 +17,7 @@ def _get_client():
     if _client is None:
         from google import genai
 
-        _client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+        _client = genai.Client(api_key=gemini_api_key())
     return _client
 
 
@@ -88,7 +88,7 @@ Output JSON with exactly these keys:
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-flash-latest",
+            model=gemini_audit_model(),
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -138,7 +138,7 @@ Output JSON with these keys:
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-flash-latest",
+            model=gemini_audit_model(),
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -174,6 +174,7 @@ async def enrich_conflicts_with_ai(state, store: MetadataStore) -> None:
                 conflict.ai_enriched = True # Prevent infinite retries on failure
 
 import asyncio
+import threading
 _session_locks: dict[str, asyncio.Lock] = {}
 
 def _get_session_lock(session_id: str) -> asyncio.Lock:
@@ -247,5 +248,21 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore):
             import traceback
             traceback.print_exc()
 
-def launch_ai_enrichment_task(session_id: str, store: MetadataStore):
-    asyncio.create_task(_ai_enrichment_worker(session_id, store))
+def launch_ai_enrichment_task(session_id: str, store: MetadataStore) -> None:
+    """Schedule AI enrichment without assuming a running event loop."""
+    try:
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            loop.create_task(_ai_enrichment_worker(session_id, store))
+            return
+    except RuntimeError:
+        pass
+
+    def _run_worker() -> None:
+        asyncio.run(_ai_enrichment_worker(session_id, store))
+
+    threading.Thread(
+        target=_run_worker,
+        name=f"ai-enrichment-{session_id[:8]}",
+        daemon=True,
+    ).start()

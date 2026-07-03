@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/discrepancycomparison.tsx","./src/components/enginebaselinepanel.tsx","./src/components/llmvalidationcalculator.tsx","./src/services/billingengine.ts","./src/services/geminiaudit.ts","./src/types/audit.ts"],"version":"5.9.3"}
