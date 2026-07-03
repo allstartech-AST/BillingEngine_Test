@@ -7,10 +7,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  envDir: path.resolve(__dirname, ".."),
+  envDir: path.resolve(__dirname, "../backend"),
   base: "/dashboard/",
   build: {
-    outDir: path.resolve(__dirname, "../app/static/react"),
+    outDir: path.resolve(__dirname, "../backend/app/static/react"),
     emptyOutDir: true,
   },
   server: {

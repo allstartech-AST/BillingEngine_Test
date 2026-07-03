@@ -9,15 +9,20 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.config import gemini_api_key, gemini_audit_model, load_env_files
+from app.engine.gemini_billing_rules import (
+    build_gemini_billing_payload,
+    timing_rules_system_instructions,
+)
 from app.engine.gemini_errors import GeminiAuditError, GeminiErrorInfo, classify_gemini_error
+from app.engine.loader import load_metadata
 
 load_env_files()
 
-SYSTEM_PROMPT = """You are an expert in US outpatient rehabilitation therapy (PT/OT/SLP) billing unit calculations.
+SYSTEM_PROMPT = f"""You are an expert in US outpatient rehabilitation therapy (PT/OT/SLP) billing unit calculations.
 
-Given CPT codes and durations in minutes, calculate billable units using ONLY the timing rule specified in the input:
-- Medicare 8-Minute Rule: CMS pooled timed-minute rule across timed CPT codes in the list
-- AMA Rule of Eight: per-code rule-of-eighths thresholds
+Given CPT codes and durations in minutes, calculate billable units using ONLY the timing rule specified in the input.
+
+{timing_rules_system_instructions()}
 
 Do not validate against any billing engine, transcript, or patient summary.
 Do not compare to pre-assigned units.
@@ -85,18 +90,27 @@ def _ruleset_label(billing_rule: str) -> str:
     return "Medicare 8-Minute Rule"
 
 
-def _build_user_prompt(codes: list[dict[str, Any]], billing_rule: str) -> str:
-    payload = {
-        "rule": _ruleset_label(billing_rule),
-        "codes": [
-            {"cpt": code["cpt"], "minutes": code["minutes"]}
-            for code in codes
-        ],
-    }
+def _build_user_prompt(
+    codes: list[dict[str, Any]],
+    billing_rule: str,
+    store,
+) -> str:
+    raw_lines = [
+        {"cpt": code["cpt"], "minutes": code["minutes"], "duration_minutes": code["minutes"]}
+        for code in codes
+    ]
+    payload = build_gemini_billing_payload(
+        raw_lines,
+        billing_rule,
+        _ruleset_label(billing_rule),
+        store,
+    )
     return (
-        "Calculate billable units for the following CPT codes and durations.\n\n"
+        "Calculate billable units for the following CPT codes and durations. "
+        "Use timed_pool_minutes for Medicare pooling (timed lines only).\n\n"
         f"{json.dumps(payload, indent=2)}\n\n"
-        "Apply the specified timing rule and return units per code plus total_units."
+        "Apply the specified timing rule and return units per code plus total_units. "
+        "total_units must sum timed-code units plus untimed occurrence units only."
     )
 
 
@@ -159,9 +173,10 @@ async def run_unit_calculation(
     from google import genai
     from google.genai import types
 
+    store = load_metadata()
     model_name = gemini_audit_model()
     client = genai.Client(api_key=api_key)
-    prompt = _build_user_prompt(codes, billing_rule)
+    prompt = _build_user_prompt(codes, billing_rule, store)
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
         response_mime_type="application/json",

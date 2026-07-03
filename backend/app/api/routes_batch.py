@@ -52,7 +52,7 @@ def billing_evaluate(payload: BillingSessionInput) -> BillingReport:
                 "message": "Billing metadata failed to load",
                 "error": str(exc),
                 "type": type(exc).__name__,
-                "hint": "Ensure JSON data files exist in ProperData and loader uses encoding=utf-8-sig",
+                "hint": "Ensure JSON data files exist in backend/data and loader uses encoding=utf-8-sig",
             },
         ) from exc
     return evaluate_session(payload, store)

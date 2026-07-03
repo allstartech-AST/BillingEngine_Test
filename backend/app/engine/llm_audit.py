@@ -3,20 +3,25 @@ import asyncio
 from typing import Any, Literal
 
 from app.config import gemini_api_key, gemini_audit_model, load_env_files
+from app.engine.gemini_billing_rules import (
+    build_gemini_billing_payload,
+    timing_rules_system_instructions,
+)
 from app.engine.gemini_errors import GeminiAuditError, GeminiErrorInfo, classify_gemini_error
+from app.engine.loader import load_metadata
 
 load_env_files()
 
-SYSTEM_PROMPT = """You are a US healthcare billing compliance auditor for outpatient rehabilitation therapy (PT/OT/SLP).
+SYSTEM_PROMPT = f"""You are a US healthcare billing compliance auditor for outpatient rehabilitation therapy (PT/OT/SLP).
 
 Your task is to validate ONLY the billing summary JSON provided by the user.
 
-Rules:
+{timing_rules_system_instructions()}
+
+Additional rules:
 - Use ONLY the billing summary data. Never infer, reconstruct, or reference any therapy transcript.
 - Never mention a transcript in your response.
 - Recalculate expected billable units from each line's documented duration_minutes.
-- Apply the selected timing rule from the input: Medicare 8-Minute Rule (CMS pooled timed minutes) OR AMA Rule of Eight (per-code thresholds).
-- For untimed codes, apply occurrence-based unit logic where appropriate.
 - Compare your recalculated expected_units against the engine_units provided in each summary line.
 - Mark each line PASSED when expected_units equals engine_units; otherwise FAILED with concise reasoning.
 - Set overall_validation to FAILED if any line fails.
@@ -73,27 +78,33 @@ def _ruleset_label(billing_rule: str) -> str:
 def _build_user_prompt(
     billing_summary: list[dict[str, Any]],
     billing_rule: str,
+    store,
 ) -> str:
-    payload = {
-        "rule": _ruleset_label(billing_rule),
-        "billing_summary": [
-            {
-                "cpt": line["cpt"],
-                "description": line.get("description", ""),
-                "duration_minutes": line["duration_minutes"],
-                "engine_units": line["engine_units"],
-                "modifier": line.get("modifier"),
-                "region": line.get("region", ""),
-            }
-            for line in billing_summary
-        ],
-    }
+    raw_lines = [
+        {
+            "cpt": line["cpt"],
+            "duration_minutes": line["duration_minutes"],
+            "engine_units": line["engine_units"],
+            "is_timed": line.get("is_timed"),
+            "description": line.get("description", ""),
+            "modifier": line.get("modifier"),
+            "region": line.get("region", ""),
+        }
+        for line in billing_summary
+    ]
+    payload = build_gemini_billing_payload(
+        raw_lines,
+        billing_rule,
+        _ruleset_label(billing_rule),
+        store,
+    )
 
     return (
         "Validate the following billing summary. Treat it as the single source of truth.\n"
-        "Do not use or reference any therapy transcript.\n\n"
+        "Do not use or reference any therapy transcript.\n"
+        "Use timed_pool_minutes for Medicare pooling — untimed minutes must not enter the pool.\n\n"
         f"{json.dumps(payload, indent=2)}\n\n"
-        "Recalculate expected_units from each line's duration_minutes using the specified rule. "
+        "Recalculate expected_units from each line using the specified rule. "
         "Compare expected_units to engine_units for each CPT. "
         "Return per-line status, overall_validation, and concise auditor_notes."
     )
@@ -189,9 +200,10 @@ async def run_compliance_audit(
     from google import genai
     from google.genai import types
 
+    store = load_metadata()
     model_name = gemini_audit_model()
     client = genai.Client(api_key=api_key)
-    prompt = _build_user_prompt(billing_summary, billing_rule)
+    prompt = _build_user_prompt(billing_summary, billing_rule, store)
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
         response_mime_type="application/json",

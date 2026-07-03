@@ -42,7 +42,7 @@ async function checkServerOnLoad() {
     if (!data.live_api) {
       content.innerHTML =
         '<div class="error"><strong>Outdated server.</strong> The API on this port does not include live session routes. ' +
-        'Stop all uvicorn processes and restart from ProperData:<br><code>python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000</code></div>';
+        'Stop all uvicorn processes and restart from the backend folder:<br><code>cd backend &amp;&amp; python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000</code></div>';
       setStatus("Server missing live API — restart required.", "error");
       return false;
     }
@@ -60,7 +60,7 @@ async function checkServerOnLoad() {
 
 function formatApiError(detail, status) {
   if (status === 404 && (detail === "Not Found" || !detail)) {
-    return "API route not found (404). Restart uvicorn from ProperData so /live/session routes are loaded.";
+    return "API route not found (404). Restart uvicorn from the backend folder so /live/session routes are loaded.";
   }
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {

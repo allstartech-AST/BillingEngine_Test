@@ -8,6 +8,10 @@ import logging
 from typing import Any
 
 from app.config import gemini_api_key, gemini_audit_model, load_env_files
+from app.engine.gemini_billing_rules import (
+    build_gemini_billing_payload,
+    timing_rules_system_instructions,
+)
 from app.engine.gemini_errors import GeminiAuditError, GeminiErrorInfo, classify_gemini_error
 from app.engine.loader import MetadataStore
 from app.engine.summary_unit_validation import (
@@ -26,16 +30,14 @@ _MAX_ATTEMPTS = 3
 _RESPONSE_ATTEMPTS = 2
 _RETRYABLE_STATUS = {429, 503}
 
-SYSTEM_PROMPT = """You are an independent US outpatient rehabilitation therapy billing auditor.
+SYSTEM_PROMPT = f"""You are an independent US outpatient rehabilitation therapy billing auditor.
 
 Your task is to verify a billing summary by independently calculating expected billable units.
 
-Rules:
+{timing_rules_system_instructions()}
+
+Additional rules:
 - Use ONLY the billing summary JSON provided. Never reference a therapy transcript or external session data.
-- Apply the specified timing rule:
-  - Medicare 8-Minute Rule: pool ALL timed treatment minutes, determine total billable units from the pooled total, then allocate units across timed CPT codes using CMS substantial-portion / remainder methodology. The sum of expected units must not exceed the total supported by pooled minutes.
-  - AMA Rule of Eight: evaluate each timed CPT code on its own documented minutes (no pooling).
-- For untimed codes, apply occurrence-based unit logic where appropriate.
 - Compare your independently calculated expected_units against the summary_units supplied for each line.
 - Mark each line PASSED when expected_units equals summary_units; otherwise FAILED with concise reasoning.
 - Set overall_validation to FAILED if any line fails.
@@ -72,21 +74,28 @@ RESPONSE_SCHEMA: dict[str, Any] = {
 def _build_user_prompt(
     lines: list[SummaryValidateLine],
     billing_rule: str,
+    store: MetadataStore,
 ) -> str:
-    payload = {
-        "rule": _rule_label(billing_rule),
-        "billing_summary": [
-            {
-                "cpt": line.cpt.strip(),
-                "duration_minutes": line.duration_minutes,
-                "summary_units": line.summary_units,
-            }
-            for line in lines
-        ],
-    }
+    raw_lines = [
+        {
+            "cpt": line.cpt.strip(),
+            "duration_minutes": line.duration_minutes,
+            "summary_units": line.summary_units,
+            "is_timed": line.is_timed,
+        }
+        for line in lines
+    ]
+    payload = build_gemini_billing_payload(
+        raw_lines,
+        billing_rule,
+        _rule_label(billing_rule),
+        store,
+    )
     return (
         "Independently audit the following billing summary. "
-        "Calculate expected billable units and compare them to summary_units.\n\n"
+        "Calculate expected billable units and compare them to summary_units. "
+        "Use timed_pool_minutes (timed lines only) for Medicare pooling — "
+        "never include untimed line minutes in the pool.\n\n"
         f"{json.dumps(payload, indent=2)}"
     )
 
@@ -304,7 +313,7 @@ async def validate_summary_units_gemini(
     billing_rule: str,
     store: MetadataStore,
 ) -> SummaryValidateResponse:
-    prompt = _build_user_prompt(lines, billing_rule)
+    prompt = _build_user_prompt(lines, billing_rule, store)
     last_error: GeminiAuditError | None = None
 
     for attempt in range(_RESPONSE_ATTEMPTS):

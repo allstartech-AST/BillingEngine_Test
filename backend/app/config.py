@@ -6,7 +6,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_env_files() -> None:
-    """Load .env then .env.local from the project root (.env.local wins)."""
+    """Load .env then .env.local from the backend root (.env.local wins)."""
     load_dotenv(PROJECT_ROOT / ".env")
     load_dotenv(PROJECT_ROOT / ".env.local", override=True)
 

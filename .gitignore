@@ -12,5 +12,5 @@ build/
 !.env.example
 node_modules/
 frontend/node_modules/
-app/static/react/
+backend/app/static/react/
 tests/

@@ -8,10 +8,22 @@ const SYSTEM_PROMPT = `You are an expert US Healthcare Billing Compliance Audito
 
 Your role is to independently audit a proposed therapy session billing scenario using your regulatory knowledge — NOT any external lookup files or databases supplied by the user.
 
-Evaluate using:
-- CMS Medicare 8-Minute Rule (pooled timed minutes across timed CPT codes) OR AMA Rule of 8 (per-code timed thresholds), based on the selected ruleset
-- Timed vs untimed CPT procedure definitions
-- Cumulative unit thresholds for timed codes (8-22 min = 1 unit, 23-37 = 2 units, etc. under Medicare pooled rule; AMA applies per-code)
+CRITICAL — Timed vs untimed CPT codes:
+- Timed treatment codes (typical timed PT/OT/SLP procedures such as 97110, 97112, 97116, 97140, 97530, 97535): duration drives unit math.
+- Untimed / evaluation / modality codes (e.g. 97161–97168 evaluations, 97010 hot/cold packs, 97014 unattended e-stim): duration is documentation only. NEVER add untimed minutes to any timed pool or total-minute sum.
+- When the user does not label is_timed, treat common timed therapeutic procedure codes as timed and evaluation/modality codes as untimed.
+
+Medicare 8-Minute Rule (CMS pooled rule):
+1. Sum minutes ONLY from timed treatment lines → timed pool.
+2. Convert pool to units: 0 if ≤7 min; 1 for 8–22 min; +1 per additional 15 min.
+3. Allocate pool units across timed lines using CMS remainder methodology.
+4. Do NOT include untimed line minutes in the pool or in timed total_units.
+
+AMA Rule of Eight:
+1. Apply per-code thresholds ONLY to timed treatment lines (no pooling).
+2. Untimed lines are excluded from AMA minute thresholds.
+
+Also evaluate:
 - Medically Unlikely Edit (MUE) unit limits where relevant
 - NCCI Procedure-to-Procedure (PTP) bundling edits and when modifier 59 (or X-modifiers) may bypass a bundling conflict
 - Anatomical / body region context when codes are region-specific or when distinct procedural regions may justify modifier 59
@@ -66,7 +78,7 @@ function getApiKey(): string | undefined {
   const key = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!key) {
     console.warn(
-      "[LLM Validation Calculator] VITE_GEMINI_API_KEY is missing. Add it to .env.local in the project root and restart the Vite dev server.",
+      "[LLM Validation Calculator] VITE_GEMINI_API_KEY is missing. Add it to backend/.env.local and restart the Vite dev server.",
     );
   }
   return key;
@@ -81,6 +93,8 @@ function buildUserPrompt(rows: CptInputRow[], ruleset: TimingRuleset): string {
   return `Audit the following therapy session billing scenario.
 
 Selected timing ruleset: ${ruleset === "AMA Rule of Eight" ? "AMA Rule of 8" : "Medicare 8-Minute Rule"}
+
+IMPORTANT: Pool minutes ONLY from timed therapeutic procedure codes. Do not add evaluation, modality, or other untimed code minutes to the Medicare timed pool.
 
 CPT line items:
 ${lines.join("\n")}
@@ -112,7 +126,7 @@ function parseGeminiError(err: unknown): string {
   const lower = message.toLowerCase();
 
   if (lower.includes("api key") && lower.includes("not configured")) {
-    return "Gemini API key is not configured. Set VITE_GEMINI_API_KEY in .env.local.";
+    return "Gemini API key is not configured. Set VITE_GEMINI_API_KEY in backend/.env.local.";
   }
   if (lower.includes("429") || lower.includes("resource_exhausted") || lower.includes("quota")) {
     if (lower.includes("limit: 0")) {
@@ -124,7 +138,7 @@ function parseGeminiError(err: unknown): string {
     return "Gemini rate limit or quota exceeded. Wait and try again.";
   }
   if (lower.includes("401") || lower.includes("403") || lower.includes("invalid api key")) {
-    return "Gemini rejected the API key. Verify VITE_GEMINI_API_KEY in .env.local.";
+    return "Gemini rejected the API key. Verify VITE_GEMINI_API_KEY in backend/.env.local.";
   }
   if (lower.includes("404") && lower.includes("model")) {
     return `Gemini model "${GEMINI_AUDIT_MODEL}" is not available for this API key.`;
@@ -139,7 +153,7 @@ export async function runGeminiAudit(
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error(
-      "Gemini API key is not configured. Set VITE_GEMINI_API_KEY in .env.local.",
+      "Gemini API key is not configured. Set VITE_GEMINI_API_KEY in backend/.env.local.",
     );
   }
 

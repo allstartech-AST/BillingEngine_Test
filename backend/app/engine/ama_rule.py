@@ -10,20 +10,32 @@ def calculate_units(
     Each timed code is calculated individually based on its own total time.
     """
     results: list[SegmentUnits] = []
-    
+
     for cpt_code, data in active_segments.items():
         minutes = data.get("minutes", 0.0)
         minutes_billed = data.get("minutes_billed", 0)
         sequences = data.get("sequences", [])
-        
-        # We only calculate units for timed codes here, just like eight_minute.py
-        # Untimed codes are handled outside this function or they don't get passed in.
+
+        if not store.is_timed(cpt_code):
+            count = len(sequences)
+            results.append(
+                SegmentUnits(
+                    cpt_code=cpt_code,
+                    minutes_exact=minutes,
+                    minutes_billed=minutes_billed,
+                    units=max(count, 1) if count else 0,
+                    method="occurrence",
+                    sequences=sequences,
+                )
+            )
+            continue
+
         base_units = int(minutes // 15)
         remainder = minutes % 15
-        
+
         if remainder >= 8:
             base_units += 1
-            
+
         results.append(
             SegmentUnits(
                 cpt_code=cpt_code,
@@ -34,5 +46,5 @@ def calculate_units(
                 sequences=sequences,
             )
         )
-        
+
     return results

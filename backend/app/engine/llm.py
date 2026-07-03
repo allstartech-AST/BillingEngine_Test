@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, List
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field
 from app.config import gemini_api_key, gemini_audit_model, load_env_files
 
 load_env_files()
+
+logger = logging.getLogger(__name__)
 
 class CptVerificationResponse(BaseModel):
     is_supported: bool = Field(description="True if supported, false if rejected")
@@ -34,10 +37,13 @@ _kb_cache = None
 
 def _get_client():
     global _client
+    api_key = gemini_api_key()
+    if not api_key:
+        return None
     if _client is None:
         from google import genai
 
-        _client = genai.Client(api_key=gemini_api_key())
+        _client = genai.Client(api_key=api_key)
     return _client
 
 
@@ -93,6 +99,13 @@ async def verify_cpt_async(
 ) -> dict[str, Any]:
     """Verifies a CPT code based on transcript context."""
     client = _get_client()
+    if client is None:
+        return {
+            "is_supported": None,
+            "reasoning": "Gemini API key is not configured.",
+            "region": "",
+            "region_confidence": 0,
+        }
     from google.genai import types
 
     kb_context = _build_kb_context(store, cpt_code) if store else ""
@@ -144,6 +157,8 @@ async def suggest_modifiers_async(
 ) -> dict[str, Any]:
     """Suggests top 3 modifiers for an NCCI conflict."""
     client = _get_client()
+    if client is None:
+        return {"suggested_modifiers": [], "reasoning": "Gemini API key is not configured."}
     from google.genai import types
 
     kb_context = _build_kb_context(store, primary_cpt, bundled_cpt) if store else ""
@@ -195,6 +210,8 @@ async def suggest_missing_cpts_async(
 ) -> dict[str, Any]:
     """Suggests missing CPT codes from the transcript using Medexa lookup."""
     client = _get_client()
+    if client is None:
+        return {"suggested_cpts": []}
     from google.genai import types
 
     kb_context = _build_kb_context(store)
@@ -261,6 +278,10 @@ def _get_session_lock(session_id: str) -> asyncio.Lock:
     return _session_locks[session_id]
 
 async def _ai_enrichment_worker(session_id: str, store: MetadataStore):
+    if not gemini_api_key():
+        logger.debug("Skipping AI enrichment for %s — GEMINI_API_KEY is unset.", session_id)
+        return
+
     lock = _get_session_lock(session_id)
     # If already locked, another task is running. We still want to queue this task,
     # so that it runs AFTER the current one finishes, to pick up any new CPTs/conflicts.

@@ -7,13 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.config import load_env_files
+from app.config import gemini_api_key, load_env_files
 from app.engine.loader import load_metadata
 from app.api import live_router, batch_router, system_router, audit_router
 
 load_env_files()
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -26,6 +27,12 @@ async def lifespan(_app: FastAPI):
         _app.state.metadata_error = str(exc)
         raise
     _app.state.metadata_error = None
+    if not gemini_api_key():
+        logger.warning(
+            "GEMINI_API_KEY is not set. AI suggestions, Gemini summary validation, "
+            "and LLM audit features will be unavailable. Add your key to backend/.env.local "
+            "in the project root and restart the server."
+        )
     yield
 
 
@@ -61,6 +68,6 @@ async def unhandled_exception_handler(_request, exc):
             "error": "Internal Server Error",
             "detail": str(exc),
             "type": type(exc).__name__,
-            "hint": "Check the uvicorn terminal for the full traceback. Common fix: restart from ProperData with python -m uvicorn app.main:app --reload",
+            "hint": "Check the uvicorn terminal for the full traceback. Start the server from backend/: python -m uvicorn app.main:app --reload",
         },
     )
