@@ -1,12 +1,19 @@
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.config import load_env_files
 from app.engine.loader import load_metadata
-from app.api import live_router, batch_router, system_router
+from app.api import live_router, batch_router, system_router, audit_router
+
+load_env_files()
+
+logging.basicConfig(level=logging.INFO)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -24,11 +31,23 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Billing Engine", version="1.0.0", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(system_router)
 app.include_router(live_router)
+app.include_router(audit_router)
 app.include_router(batch_router)
 
 

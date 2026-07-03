@@ -340,6 +340,7 @@ function renderUi(ui, onModifierAction) {
 let liveSessionId = null;
 let sessionFinalized = false;
 let lastLiveUi = null;
+let lastFinalizeDisplay = null;
 
 function patientInitials(name) {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean);
@@ -353,11 +354,22 @@ function patientInitials(name) {
 function showEditMode() {
   document.getElementById("edit-mode").hidden = false;
   document.getElementById("review-mode").hidden = true;
+  const calcPanel = document.getElementById("llm-unit-calculator-panel");
+  if (calcPanel) calcPanel.classList.add("hidden");
+  if (window.SummaryValidation) {
+    SummaryValidation.hide();
+  }
+  if (window.LlmUnitCalculator) {
+    LlmUnitCalculator.hide();
+  }
 }
 
 function showReviewMode() {
   document.getElementById("edit-mode").hidden = true;
   document.getElementById("review-mode").hidden = false;
+  if (window.LlmUnitCalculator) {
+    LlmUnitCalculator.onReviewShown();
+  }
 }
 
 function updateReviewPatientHeader(finalize, ui) {
@@ -383,6 +395,7 @@ function renderFinalizedBilling(finalize, ui) {
   if (!finalize) return;
   sessionFinalized = true;
   lastLiveUi = ui;
+  lastFinalizeDisplay = finalize;
   showReviewMode();
   updateFinalizeBar(null);
   updateReviewPatientHeader(finalize, ui);
@@ -394,11 +407,11 @@ function renderFinalizedBilling(finalize, ui) {
       unitsHtml = `<input type="number" class="manual-unit-input" data-cpt="${escapeHtml(line.cpt_code)}" value="${line.units}" min="0" style="width: 60px; padding: 4px; border: 2px solid var(--color-orange); border-radius: 4px; font-weight: bold; text-align: center;">`;
     }
     return `
-          <tr ${line.is_timed === false ? 'style="background-color: #fffbeb;"' : ''}>
+          <tr data-summary-cpt="${escapeHtml(line.cpt_code)}" ${line.is_timed === false ? 'style="background-color: #fffbeb;"' : ''}>
             <td><a href="#" class="cpt-code-link" onclick="return false;">${escapeHtml(line.cpt_code)}</a></td>
             <td>${escapeHtml(line.description)}</td>
             <td>${(line.applied_modifiers && line.applied_modifiers.length) ? escapeHtml(line.applied_modifiers.join(", ")) : "None"}</td>
-            <td>${unitsHtml}</td>
+            <td data-summary-units-cell>${unitsHtml}</td>
             <td>${escapeHtml(line.duration_display)}</td>
             <td><input type="text" class="region-input" data-cpt="${escapeHtml(line.cpt_code)}" value="${line.region === '--' ? '' : escapeHtml(line.region)}" placeholder="ex. spine, knee, head, etc" style="width: 100%; max-width: 150px; border: 1px solid var(--border); padding: 4px; border-radius: 4px;"></td>
           </tr>`;
@@ -482,6 +495,18 @@ function renderFinalizedBilling(finalize, ui) {
             </table>
           </div>
           ${rejectedSection}
+          <section class="summary-validation-section mt-8 border-t border-slate-200 pt-6">
+            <div class="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Duration → Units Check</p>
+                <h2 class="text-lg font-extrabold text-ast-navy">Summary Unit Validation</h2>
+                <p class="mt-1 text-xs text-slate-500">Verifies assigned units match durations documented in this billing summary.</p>
+              </div>
+              <div id="summary-validation-overall"></div>
+            </div>
+            <div id="summary-validation-rule" class="mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 text-xs font-semibold text-slate-600"></div>
+            <div id="summary-validation-results" aria-live="polite"></div>
+          </section>
           <button type="button" class="btn-sign" id="btn-sign-document">Sign &amp; Finalize Document</button>
         </div>`;
 
@@ -490,6 +515,10 @@ function renderFinalizedBilling(finalize, ui) {
     setStatus("Document signed and finalized (prototype).", "success");
     document.getElementById("btn-sign-document").disabled = true;
   });
+
+  if (window.SummaryValidation) {
+    SummaryValidation.validateFromReview(finalize, ui);
+  }
 
   const manualInputs = reviewContent.querySelectorAll(".manual-unit-input");
   manualInputs.forEach(input => {
@@ -507,6 +536,10 @@ function renderFinalizedBilling(finalize, ui) {
       const tableTotalUnits = document.getElementById("finalize-table-total-units");
       if (statUnits) statUnits.textContent = total;
       if (tableTotalUnits) tableTotalUnits.textContent = total;
+
+      if (window.SummaryValidation && lastFinalizeDisplay) {
+        SummaryValidation.revalidate(lastFinalizeDisplay, lastLiveUi);
+      }
     });
   });
 }
@@ -514,6 +547,7 @@ function renderFinalizedBilling(finalize, ui) {
 function clearSessionForNewInput() {
   liveSessionId = null;
   lastLiveUi = null;
+  lastFinalizeDisplay = null;
   sessionFinalized = false;
 
   if (document.getElementById("live-icd")) document.getElementById("live-icd").value = "";
@@ -534,6 +568,12 @@ function clearSessionForNewInput() {
 
   document.getElementById("finalize-bar").hidden = true;
   document.getElementById("review-content").innerHTML = "";
+  if (window.SummaryValidation) {
+    SummaryValidation.onSessionCleared();
+  }
+  if (window.LlmUnitCalculator) {
+    LlmUnitCalculator.onSessionCleared();
+  }
 }
 
 async function backToEditMode() {
@@ -943,16 +983,25 @@ async function liveFinalize() {
 document.getElementById("btn-finalize").addEventListener("click", liveFinalize);
 document.getElementById("btn-back").addEventListener("click", backToEditMode);
 
-document.getElementById("tab-transcript").addEventListener("click", function () {
-  showEditMode();
-  document.getElementById("transcript-section").hidden = false;
-  document.getElementById("tab-transcript").classList.add("active");
-  updateFinalizeBar({ session: { status: sessionFinalized ? "ended" : "active" } });
-});
+const tabTranscript = document.getElementById("tab-transcript");
+if (tabTranscript) {
+  tabTranscript.addEventListener("click", function () {
+    showEditMode();
+    document.getElementById("transcript-section").hidden = false;
+    tabTranscript.classList.add("active");
+    updateFinalizeBar({ session: { status: sessionFinalized ? "ended" : "active" } });
+  });
+}
 
 const params = new URLSearchParams(window.location.search);
 const fixtureParam = params.get("fixture");
 checkServerOnLoad().then(function (ok) {
+  if (window.SummaryValidation) {
+    SummaryValidation.init(apiUrl, escapeHtml);
+  }
+  if (window.LlmUnitCalculator) {
+    LlmUnitCalculator.init(apiUrl, escapeHtml);
+  }
   if (ok && fixtureParam) {
     evaluateFixture("/static/fixtures/" + fixtureParam.replace(/^\/+/, ""));
   }

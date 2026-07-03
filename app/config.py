@@ -1,6 +1,30 @@
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_env_files() -> None:
+    """Load .env then .env.local from the project root (.env.local wins)."""
+    load_dotenv(PROJECT_ROOT / ".env")
+    load_dotenv(PROJECT_ROOT / ".env.local", override=True)
+
+
+def gemini_api_key() -> str | None:
+    import os
+
+    load_env_files()
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("VITE_GEMINI_API_KEY")
+
+
+def gemini_audit_model() -> str:
+    import os
+
+    load_env_files()
+    return os.environ.get("GEMINI_AUDIT_MODEL", "gemini-2.5-flash")
+
+
 DATA_DIR = PROJECT_ROOT / "data"
 BILLING_DIR = DATA_DIR / "billing"
 MEDEXA_DIR = DATA_DIR / "medexa"
