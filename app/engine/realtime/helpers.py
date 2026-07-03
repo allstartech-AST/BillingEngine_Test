@@ -225,6 +225,14 @@ def _refresh_conflicts(state: LiveSessionState, store: MetadataStore) -> None:
     active = active_cpt_codes(state.cpts)
     conflicts, issues, hard_removed = incremental_conflicts(active, store)
 
+    old_conflicts = {c.conflict_id: c for c in state.conflicts}
+    for c in conflicts:
+        if c.conflict_id in old_conflicts:
+            old_c = old_conflicts[c.conflict_id]
+            if old_c.ai_enriched:
+                c.ai_enriched = old_c.ai_enriched
+                c.recommendations = old_c.recommendations
+
     for cpt in hard_removed:
         row = _find_row(state.cpts, cpt)
         if row:

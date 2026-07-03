@@ -23,6 +23,7 @@ class LiveCptRow(BaseModel):
         "manual_billing",
         "removed",
         "error",
+        "ai_suggested",
     ] = "detected"
     is_timed: bool = False
     duration_minutes_exact: float = 0.0
@@ -59,6 +60,7 @@ class LiveSessionState(BaseModel):
     session_message: str = ""
     whole_transcript: str = ""
     billing_rule: Literal["cms_8_minute", "ama_rule_of_8"] = "cms_8_minute"
+    last_cpt_suggestion_length: int = 0
 
 
 class LiveSessionCreateRequest(BaseModel):

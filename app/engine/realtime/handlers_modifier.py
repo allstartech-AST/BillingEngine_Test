@@ -33,6 +33,45 @@ def on_modifier_action(
     store: MetadataStore,
 ) -> LiveSessionResponse:
     state = get_session(session_id)
+    
+    if conflict_id.startswith("ai_suggest_"):
+        cpt_target = conflict_id.replace("ai_suggest_", "")
+        target = _find_row(state.cpts, cpt_target)
+        if target:
+            if action == "approve":
+                target.lifecycle = "detected" if target.is_timed else "manual_billing"
+                target.billing_status = "confirmed" if target.is_timed else "manual"
+                target.rule_message = f"{'AMA Rule of 8' if state.billing_rule == 'ama_rule_of_8' else '8-minute rule'} applies — provide duration when this CPT ends." if target.is_timed else "Occurrence/modality code — units are calculated manually by the therapist."
+                target.message = "AI suggestion approved."
+                msg = f"AI suggestion {cpt_target} approved."
+            else:
+                target.lifecycle = "removed"
+                target.billing_status = "removed"
+                target.message = "AI suggestion rejected."
+                msg = f"AI suggestion {cpt_target} rejected."
+        else:
+            msg = f"AI suggestion {cpt_target} not found."
+        
+        _refresh_conflicts(state, store)
+        _recalculate_units(state, store)
+        save_session(state)
+        return _live_response(state, store, msg)
+        
+    if conflict_id.startswith("ai_reject_"):
+        cpt_to_remove = conflict_id.replace("ai_reject_", "")
+        target = _find_row(state.cpts, cpt_to_remove)
+        if target:
+            target.lifecycle = "removed"
+            target.billing_status = "removed"
+            target.units = 0
+            target.duration_minutes_exact = 0
+            target.minutes_billed = 0
+            target.message = f"Rejected — AI detected weak transcript support."
+        _refresh_conflicts(state, store)
+        _recalculate_units(state, store)
+        save_session(state)
+        return _live_response(state, store, f"CPT {cpt_to_remove} removed due to weak transcript support.")
+
     conflict = next((c for c in state.conflicts if c.conflict_id == conflict_id), None)
     if not conflict:
         return _live_response(state, store, f"Conflict {conflict_id} not found.")
@@ -46,7 +85,8 @@ def on_modifier_action(
                 if not row.pending_reasons:
                     row.billing_status = "confirmed"
                 if modifier and modifier not in row.applied_modifiers:
-                    row.applied_modifiers.append(modifier)
+                    if row.cpt_code == conflict.column_two_code or row.cpt_code == getattr(conflict, "modifier_applies_to", None):
+                        row.applied_modifiers.append(modifier)
         _apply_conflict_pending(state)
         _recalculate_units(state, store)
         msg = f"Modifier approved for {conflict_id}."

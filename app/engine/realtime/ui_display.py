@@ -156,7 +156,19 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
         card_style = "standard"
         verification = "confirmed"
 
-        if row.is_timed:
+        if row.lifecycle == "ai_suggested":
+            badge = "✨ AI Suggested"
+            card_style = "ai_suggested"
+            verification = "pending_review"
+            suggestions.append(
+                UiSuggestion(
+                    type="ai_suggested",
+                    severity="action_required",
+                    summary=getattr(row, "ai_reasoning", "AI detected this service based on the transcript."),
+                    conflict_id=f"ai_suggest_{row.cpt_code}"
+                )
+            )
+        elif row.is_timed:
             if state.billing_rule == "ama_rule_of_8":
                 badge = "AMA Rule of 8"
                 if is_detected:
@@ -208,10 +220,21 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                 UiSuggestion(type="manual_billing", severity="advisory", summary=summary)
             )
 
+        if getattr(row, "ai_supported", True) is False:
+            badge = badge or "Transcript Weak"
+            card_style = "review"
+            verification = "pending_review"
+            suggestions.append(
+                UiSuggestion(
+                    type="transcript_weak",
+                    severity="action_required",
+                    summary=f"AI Detection: This CPT code may not be supported by the transcript. {getattr(row, 'ai_reasoning', '')}",
+                )
+            )
+
         if ncci and (is_pending or is_detected or is_completed):
             card_style = "review"
             verification = "pending_review"
-            conflict_id = ncci.conflict_id
             conflict_with = (
                 ncci.column_one_code
                 if row.cpt_code == ncci.column_two_code
@@ -225,16 +248,15 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
             if applies_here:
                 badge = "Modifier 59 Required"
                 modifiers = list(MODIFIERS)
-                ai_mods = []
+                ai_enriched_applied = False
                 if ncci.ai_enriched:
                     for rec in ncci.recommendations:
-                        if rec.action == "apply_modifier" and rec.modifiers:
-                            ai_mods = rec.modifiers
+                        if rec.action == "apply_modifier":
+                            modifiers = rec.modifiers or []
                             conflict_message = rec.summary
+                            ai_enriched_applied = True
                             break
-                if ai_mods:
-                    modifiers = ai_mods
-                else:
+                if not ai_enriched_applied:
                     conflict_message = (
                         f"NCCI bundle with Column 1 code {conflict_with} (modifier indicator {indicator}). "
                         f"If this was a distinct separate service, apply {modifier_labels} to {row.cpt_code}."
@@ -244,9 +266,13 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                 col2 = ncci.column_two_code or conflict_with
                 conflict_message = (
                     f"NCCI bundle with {conflict_with} (modifier indicator {indicator}). "
-                    f"Column 2 ({col2}) may need {modifier_labels} if billed as distinct from Column 1."
+                    f"Please resolve this conflict on the Column 2 code ({col2})."
                 )
-            actions = UiCptActions(reject_enabled=True, approve_enabled=True)
+            
+            if applies_here:
+                conflict_id = ncci.conflict_id
+                actions.approve_enabled = True
+                actions.reject_enabled = True
             suggestions.append(
                 UiSuggestion(
                     type="ncci_bundling",

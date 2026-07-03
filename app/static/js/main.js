@@ -124,7 +124,8 @@ function renderModifierPills(modifiers) {
 }
 
 function renderCptCard(card) {
-  const review = card.card_style === "review" ? " review" : "";
+  const review = card.card_style === "review" ? " review" : card.card_style === "ai_suggested" ? " ai-suggested" : "";
+  const cardInlineStyle = card.card_style === "ai_suggested" ? 'style="opacity: 0.85; background: #f9fafb; border: 2px dashed #9ca3af;"' : "";
   const badge = card.badge ? `<span class="badge-black">${escapeHtml(card.badge)}</span>` : "";
   const conflict = card.conflict_message
     ? `<div class="conflict-text">${escapeHtml(card.conflict_message)}</div>`
@@ -137,7 +138,24 @@ function renderCptCard(card) {
       if (isEnded && (s.type === "rule_applicability" || s.type === "awaiting_end")) return false;
       return true;
     })
-    .map(s => `<li>${escapeHtml(s.summary)}</li>`).join("");
+    .map(s => {
+      if (s.type === "transcript_weak") {
+          return `<li style="display: flex; flex-direction: column; gap: 4px;">
+              <span>${escapeHtml(s.summary)}</span>
+              <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="align-self: flex-start; margin-top: 4px; padding: 4px 8px; font-size: 12px; background: #fee2e2; color: #dc2626; border-radius: 4px; font-weight: 500;">✕ Accept AI Suggestion & Remove</button>
+          </li>`;
+      }
+      if (s.type === "ai_suggested") {
+          return `<li style="display: flex; flex-direction: column; gap: 8px;">
+              <span>${escapeHtml(s.summary)}</span>
+              <div style="display: flex; gap: 8px;">
+                  <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: #fee2e2; color: #dc2626; border-radius: 4px; font-weight: 500;">✕ Reject</button>
+                  <button class="btn-text approve" data-action="approve" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: #dcfce7; color: #16a34a; border-radius: 4px; font-weight: 500;">✓ Approve</button>
+              </div>
+          </li>`;
+      }
+      return `<li>${escapeHtml(s.summary)}</li>`;
+    }).join("");
   const suggestionList = extraSuggestions
     ? `<ul class="suggestion-list">${extraSuggestions}</ul>` : "";
   const actions = (card.actions.approve_enabled || card.actions.reject_enabled)
@@ -145,11 +163,7 @@ function renderCptCard(card) {
             ${card.actions.reject_enabled ? '<button class="btn-text reject" data-action="reject">✕ Reject</button>' : ""}
             ${card.actions.approve_enabled ? `
               <span style="font-size: 13px; font-weight: 500;">Resolve with:</span>
-              <button class="btn-text modifier-btn" data-action="approve" data-modifier="59">59</button>
-              <button class="btn-text modifier-btn" data-action="approve" data-modifier="XE">XE</button>
-              <button class="btn-text modifier-btn" data-action="approve" data-modifier="XP">XP</button>
-              <button class="btn-text modifier-btn" data-action="approve" data-modifier="XS">XS</button>
-              <button class="btn-text modifier-btn" data-action="approve" data-modifier="XU">XU</button>
+              ${(card.modifiers_suggested && card.modifiers_suggested.length > 0 ? card.modifiers_suggested : ['59', 'XE', 'XP', 'XS', 'XU']).map(m => `<button class="btn-text modifier-btn" data-action="approve" data-modifier="${escapeHtml(m)}">${escapeHtml(m)}</button>`).join('\n              ')}
               <input type="text" class="custom-modifier-input" placeholder="Custom..." style="width: 70px; padding: 2px 6px; font-size: 13px;">
               <button class="btn-text custom-modifier-apply" data-action="approve">Apply</button>
             ` : ""}
@@ -172,7 +186,7 @@ function renderCptCard(card) {
   }
 
   return `
-        <div class="cpt-card${review}" data-cpt="${escapeHtml(card.cpt_code)}" data-is-timed="${card.is_timed}"${card.conflict_id ? ' data-conflict-id="' + escapeHtml(card.conflict_id) + '"' : ""}>
+        <div class="cpt-card${review}" data-cpt="${escapeHtml(card.cpt_code)}" data-is-timed="${card.is_timed}"${card.conflict_id ? ' data-conflict-id="' + escapeHtml(card.conflict_id) + '"' : ""} ${cardInlineStyle}>
           <div class="card-title" style="display: flex; justify-content: space-between; align-items: flex-start;">
             <span>${escapeHtml(card.cpt_code)} — ${escapeHtml(card.short_label)}</span>
             ${(card.duration_display === "—") ? `
@@ -300,7 +314,7 @@ function renderUi(ui, onModifierAction) {
         return;
       }
 
-      const conflictId = card?.dataset.conflictId;
+      const conflictId = e.target.dataset.conflictId || card?.dataset.conflictId;
 
       let modifier = e.target.dataset.modifier || null;
       if (e.target.classList.contains("custom-modifier-apply")) {
@@ -556,7 +570,7 @@ async function liveApi(path, method, body) {
   return data;
 }
 
-function handleLiveResponse(data) {
+function handleLiveResponse(data, silent = false) {
   if (!data || !data.ui_display) {
     throw new Error("Server returned no ui_display.");
   }
@@ -567,14 +581,14 @@ function handleLiveResponse(data) {
   }
   if (data.finalize_display) {
     renderFinalizedBilling(data.finalize_display, data.ui_display);
-    setStatus(data.event_message || "Billing finalized.", "success");
+    if (!silent) setStatus(data.event_message || "Billing finalized.", "success");
     return;
   }
   syncLiveCptInputs(data.open_cpt_code);
   lastLiveUi = data.ui_display;
   renderUi(data.ui_display);
   updateFinalizeBar(data);
-  setStatus(data.event_message || "Updated.", data.session?.status === "blocked" ? "error" : "success");
+  if (!silent) setStatus(data.event_message || "Updated.", data.session?.status === "blocked" ? "error" : "success");
 }
 
 function syncLiveCptInputs(openCptCode) {
@@ -613,7 +627,25 @@ async function handleAction(cpt, action, conflictId, modifier) {
   }
 }
 
+let pollingInterval = null;
+function startPolling() {
+  if (pollingInterval) return;
+  pollingInterval = setInterval(async () => {
+    if (liveSessionId && !sessionFinalized) {
+      // Don't refresh if the user is typing in an input
+      if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+      try {
+        const data = await liveApi("/live/session/" + liveSessionId, "GET");
+        handleLiveResponse(data, true);
+      } catch (err) {
+        // ignore
+      }
+    }
+  }, 2000);
+}
+
 async function startLiveSession() {
+  startPolling();
   content.innerHTML = '<div class="loading">Starting live session...</div>';
   try {
     const ruleEl = document.getElementById("transcript-billing-rule");
