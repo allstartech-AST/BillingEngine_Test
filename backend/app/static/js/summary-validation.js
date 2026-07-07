@@ -5,6 +5,8 @@
   var escapeHtmlFn = null;
   var billingRule = "cms_8_minute";
   var lastValidation = null;
+  var lastFinalize = null;
+  var lastUi = null;
 
   function $(id) {
     return document.getElementById(id);
@@ -35,6 +37,12 @@
 
   function ruleLabel(rule) {
     return rule === "ama_rule_of_8" ? "AMA Rule of Eight" : "Medicare 8-Minute Rule";
+  }
+
+  function auditorLabel(auditor) {
+    if (auditor === "openai") return "OpenAI independent audit";
+    if (auditor === "auto") return "OpenAI with local fallback";
+    return "Local billing engine";
   }
 
   function warningIcon() {
@@ -87,6 +95,48 @@
     });
   }
 
+  function bindOpenAiAuditButton() {
+    var btn = document.getElementById("btn-summary-openai-audit");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", function () {
+      if (lastFinalize) {
+        runValidation(lastFinalize, lastUi, "openai");
+      }
+    });
+  }
+
+  function renderIdleState(finalize, ui) {
+    lastFinalize = finalize;
+    lastUi = ui;
+
+    var els = ensureElements();
+    if (!els.resultsEl) return;
+
+    billingRule =
+      (ui && ui.summary_cards && ui.summary_cards.billing_rule) || billingRule;
+
+    if (els.ruleEl) {
+      els.ruleEl.textContent = "Rule set: " + ruleLabel(billingRule);
+    }
+    if (els.overallEl) {
+      els.overallEl.innerHTML = "";
+    }
+
+    els.resultsEl.innerHTML =
+      "<div class=\"rounded-xl border border-slate-200/80 bg-slate-50/50 p-4\">" +
+      "<div class=\"flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between\">" +
+      "<div>" +
+      "<p class=\"text-xs font-bold text-ast-navy\">Independent LLM Unit Audit</p>" +
+      "<p class=\"text-[11px] leading-relaxed text-slate-500\">Run the LLM audit to compare summary-assigned units against independently calculated expected units.</p>" +
+      "</div>" +
+      "<button type=\"button\" id=\"btn-summary-openai-audit\" class=\"rounded-lg border border-slate-300 bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-50\">Run LLM Audit</button>" +
+      "</div>" +
+      "</div>";
+
+    bindOpenAiAuditButton();
+  }
+
   function renderValidationResults(validation) {
     var els = ensureElements();
     if (!els.resultsEl || !validation) return;
@@ -125,9 +175,14 @@
 
     els.resultsEl.innerHTML =
       "<div class=\"rounded-xl border border-slate-200/80 bg-slate-50/50 p-3\">" +
-      "<div class=\"mb-3 flex items-center justify-between gap-2\">" +
+      "<div class=\"mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between\">" +
+      "<div>" +
       "<p class=\"text-xs font-bold text-ast-navy\">Summary Unit Audit</p>" +
+      "<p class=\"text-[10px] text-slate-500\">Auditor: " + escapeHtmlFn(auditorLabel(validation.auditor)) + "</p>" +
+      "</div>" +
+      "<div class=\"flex flex-wrap items-center gap-2\">" +
       (overallPassed ? passedBadge() : failedBadge()) +
+      "</div>" +
       "</div>" +
       (validation.fallback_message
         ? "<div class=\"mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800\">" +
@@ -174,18 +229,27 @@
     });
   }
 
-  function showLoadingState() {
+  function showLoadingState(auditor) {
     var els = ensureElements();
     if (!els.resultsEl) return;
+    var message =
+      auditor === "openai"
+        ? "Running independent validation via OpenAI..."
+        : "Running local billing engine validation...";
     els.resultsEl.innerHTML =
       "<div class=\"flex items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/50 py-8 text-xs text-slate-500\">" +
       "<svg class=\"h-4 w-4 animate-spin text-ast-blue\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\">" +
       "<circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle>" +
       "<path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z\"></path></svg>" +
-      "Running independent validation via Gemini...</div>";
+      message +
+      "</div>";
   }
 
-  async function runValidation(finalize, ui) {
+  async function runValidation(finalize, ui, auditor) {
+    auditor = auditor || "local";
+    lastFinalize = finalize;
+    lastUi = ui;
+
     var els = ensureElements();
     if (!finalize || !finalize.lines || !finalize.lines.length || !resolveApiUrl) {
       if (els.resultsEl) {
@@ -202,7 +266,7 @@
       els.ruleEl.textContent = "Rule set: " + ruleLabel(billingRule);
     }
 
-    showLoadingState();
+    showLoadingState(auditor);
 
     try {
       var response = await fetch(resolveApiUrl("/billing/validate-summary-units"), {
@@ -211,6 +275,7 @@
         body: JSON.stringify({
           lines: buildPayloadFromFinalize(finalize),
           billing_rule: billingRule,
+          auditor: auditor,
         }),
       });
       var data = await response.json().catch(function () { return {}; });
@@ -242,15 +307,21 @@
     },
 
     validateFromReview: function (finalize, ui) {
-      runValidation(finalize, ui);
+      renderIdleState(finalize, ui);
     },
 
     revalidate: function (finalize, ui) {
-      runValidation(finalize, ui);
+      renderIdleState(finalize, ui);
+    },
+
+    runOpenAiAudit: function (finalize, ui) {
+      runValidation(finalize, ui, "openai");
     },
 
     hide: function () {
       lastValidation = null;
+      lastFinalize = null;
+      lastUi = null;
       var els = ensureElements();
       if (els.resultsEl) els.resultsEl.innerHTML = "";
       if (els.ruleEl) els.ruleEl.textContent = "";
@@ -263,3 +334,4 @@
     },
   };
 })();
+

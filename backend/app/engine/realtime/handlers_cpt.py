@@ -1,29 +1,15 @@
 
 from app.engine.loader import MetadataStore
-from app.models.live import LiveSessionResponse, LiveClientInfo
-from app.engine.realtime.store import get_session, save_session, create_session
+from app.models.live import LiveSessionResponse
+from app.engine.realtime.store import get_session, save_session
 from app.engine.realtime.helpers import (
-    _append_icd, _parse_icd_input, _reactivate_session, _apply_icd_validation,
-    _revalidate_all_cpts_icd, _sync_row_messages, _next_sequence, _find_row,
-    _open_cpt_row, _live_response, _apply_conflict_pending,
-    _refresh_completed_rule_messages, _recalculate_units, _refresh_conflicts
+    _reactivate_session, _apply_icd_validation, _sync_row_messages,
+    _next_sequence, _find_row, _open_cpt_row, _live_response,
+    _reconcile_billing_state, _reconcile_billing_state_and_save,
+    _pending_and_recalculate_billing, _refresh_conflicts, _sync_all_row_messages,
 )
+from app.engine.realtime.rules import unresolved_bypassable
 from app.models.live import LiveCptRow
-from app.engine.realtime.rules import (
-    active_cpt_codes,
-    conflict_codes,
-    icd_pending_for_cpt,
-    incremental_conflicts,
-    unresolved_bypassable,
-    _issue_removal_reason,
-)
-from app.engine.mue import apply_mue_cap
-from app.engine.eight_minute import calculate_units as calculate_units_cms
-from app.engine import ama_rule
-from app.engine.icd10 import icd_code_variants
-
-
-from app.engine.transcript_medexa import validate_cpt_transcript_support, validate_icd10_transcript_support
 
 def on_cpt_detected(session_id: str, cpt_code: str, store: MetadataStore) -> LiveSessionResponse:
     state = get_session(session_id)
@@ -81,14 +67,12 @@ def on_cpt_detected(session_id: str, cpt_code: str, store: MetadataStore) -> Liv
 
     state.cpts.append(row)
     _refresh_conflicts(state, store)
-    
-    from app.engine.llm import launch_ai_enrichment_task
+
+    from app.engine.llm_enrichment import launch_ai_enrichment_task
     launch_ai_enrichment_task(session_id, store)
-    
-    _apply_conflict_pending(state)
-    _recalculate_units(state, store)
-    for r in state.cpts:
-        _sync_row_messages(r)
+
+    _pending_and_recalculate_billing(state, store)
+    _sync_all_row_messages(state)
     save_session(state)
 
     rule_note = f"Timed CPT ({'AMA Rule of 8' if state.billing_rule == 'ama_rule_of_8' else '8-minute rule'})." if is_timed else "Manual/occurrence billing."
@@ -209,10 +193,7 @@ def on_cpt_end(
             "Units are calculated manually by the therapist (not under timed rule)."
         )
         _sync_row_messages(row)
-        _refresh_conflicts(state, store)
-        _apply_conflict_pending(state)
-        _recalculate_units(state, store)
-        save_session(state)
+        _reconcile_billing_state_and_save(state, store)
         return _live_response(
             state,
             store,
@@ -229,10 +210,8 @@ def on_cpt_end(
     row.duration_minutes_exact = round(float(duration_minutes), 2)
     row.minutes_billed = int(round(duration_minutes))
 
-    _refresh_conflicts(state, store)
-    _apply_conflict_pending(state)
+    _reconcile_billing_state(state, store)
     open_conflicts = unresolved_bypassable(state.conflicts, set(state.resolved_conflicts))
-    _recalculate_units(state, store)
     if open_conflicts:
         msg = (
             f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact} min; "

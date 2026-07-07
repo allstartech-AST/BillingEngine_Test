@@ -1,5 +1,4 @@
 from app.engine.loader import MetadataStore
-from app.engine.realtime.ui_display import visible_live_cpt_rows
 from app.engine.ui_display import format_duration_mmss, format_session_duration
 from app.models.live import FinalizeCptLine, FinalizeDisplay, LiveCptRow, LiveSessionState
 
@@ -30,7 +29,6 @@ def _display_duration(row: LiveCptRow) -> str:
 
 
 def build_finalize_display(state: LiveSessionState, store: MetadataStore) -> FinalizeDisplay:
-    rows = visible_live_cpt_rows(state.cpts)
     lines: list[FinalizeCptLine] = []
     total_minutes = 0.0
     billable_units = 0

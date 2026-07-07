@@ -1,30 +1,34 @@
 
 import re
 from app.engine.loader import MetadataStore
-from app.models.live import LiveSessionResponse, LiveClientInfo
-from app.engine.realtime.store import get_session, save_session, create_session
+from app.models.live import LiveSessionResponse, LiveClientInfo, LiveCptRow
+from app.engine.realtime.store import get_session, save_session
 from app.engine.realtime.helpers import (
-    _append_icd, _parse_icd_input, _reactivate_session, _apply_icd_validation,
-    _revalidate_all_cpts_icd, _sync_row_messages, _next_sequence, _find_row,
-    _open_cpt_row, _live_response, _apply_conflict_pending,
-    _refresh_completed_rule_messages, _recalculate_units, _refresh_conflicts
+    _append_icd, _reactivate_session, _apply_icd_validation,
+    _revalidate_all_cpts_icd, _sync_row_messages, _next_sequence,
+    _open_cpt_row, _live_response, _pending_and_recalculate_billing,
+    _refresh_conflicts, _recalculate_units,
 )
-from app.models.live import LiveCptRow
-from app.engine.realtime.rules import (
-    active_cpt_codes,
-    conflict_codes,
-    icd_pending_for_cpt,
-    incremental_conflicts,
-    unresolved_bypassable,
-    _issue_removal_reason,
-)
-from app.engine.mue import apply_mue_cap
-from app.engine.eight_minute import calculate_units as calculate_units_cms
-from app.engine import ama_rule
-from app.engine.icd10 import icd_code_variants
-
-
+from app.engine.realtime.rules import unresolved_bypassable
+from app.config import LLM_SENTENCES_PER_AI_BATCH
 from app.engine.transcript_medexa import validate_cpt_transcript_support, validate_icd10_transcript_support
+
+SENTENCES_PER_AI_BATCH = LLM_SENTENCES_PER_AI_BATCH
+
+
+def _maybe_launch_ai_enrichment(
+    state,
+    session_id: str,
+    store: MetadataStore,
+    sentence_count: int,
+) -> None:
+    prev_count = state.sentences_fed_count
+    state.sentences_fed_count += sentence_count
+    if prev_count // SENTENCES_PER_AI_BATCH < state.sentences_fed_count // SENTENCES_PER_AI_BATCH:
+        from app.engine.llm_enrichment import launch_ai_enrichment_task
+
+        launch_ai_enrichment_task(session_id, store)
+
 
 def create_live_session(client: LiveClientInfo, billing_rule: str, store: MetadataStore) -> LiveSessionResponse:
     from app.engine.realtime.store import create_session
@@ -64,7 +68,13 @@ def on_session_end(session_id: str, store: MetadataStore) -> LiveSessionResponse
     return _live_response(state, store, state.session_message)
 
 
-def on_sentence_fed(session_id: str, sentence: str, store: MetadataStore) -> LiveSessionResponse:
+def on_sentence_fed(
+    session_id: str,
+    sentence: str,
+    store: MetadataStore,
+    *,
+    sentence_count: int = 1,
+) -> LiveSessionResponse:
     state = get_session(session_id)
     _reactivate_session(state)
     if not sentence.strip():
@@ -86,6 +96,8 @@ def on_sentence_fed(session_id: str, sentence: str, store: MetadataStore) -> Liv
         possible_cpts.update(store.cpt_keyword_index.get(w, set()))
 
     if not possible_icds and not possible_cpts:
+        _maybe_launch_ai_enrichment(state, session_id, store, sentence_count)
+        save_session(state)
         return _live_response(state, store, "No relevant keywords detected (fast path).")
 
     added_icds = []
@@ -129,14 +141,13 @@ def on_sentence_fed(session_id: str, sentence: str, store: MetadataStore) -> Liv
         for row in state.cpts:
             _sync_row_messages(row)
         _refresh_conflicts(state, store)
-        
-        from app.engine.llm import launch_ai_enrichment_task
-        launch_ai_enrichment_task(session_id, store)
-        
-        _apply_conflict_pending(state)
-        _recalculate_units(state, store)
-        save_session(state)
-        return _live_response(state, store, f"Detected: {', '.join(added_cpts + added_icds)}")
-    
-    return _live_response(state, store, "No high-confidence codes detected.")
+        message = f"Detected: {', '.join(added_cpts + added_icds)}"
+    else:
+        message = "No high-confidence codes detected."
+
+    _maybe_launch_ai_enrichment(state, session_id, store, sentence_count)
+
+    _pending_and_recalculate_billing(state, store)
+    save_session(state)
+    return _live_response(state, store, message)
 

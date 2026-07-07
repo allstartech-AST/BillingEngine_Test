@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from app.config import MODIFIERS
 from app.engine.loader import MetadataStore
@@ -53,7 +54,35 @@ def _find_conflicts(active_cpts: set[str], store: MetadataStore) -> list[PtpConf
     return conflicts
 
 
-def _build_bypassable_conflict(conflict: PtpConflict, store: MetadataStore) -> BillingConflict:
+def classify_ptp_conflicts(
+    active_cpts: set[str],
+    store: MetadataStore,
+) -> tuple[list[PtpConflict], list[PtpConflict]]:
+    """Split PTP edits into hard bundles (no modifier) vs bypassable pairs."""
+    hard: list[PtpConflict] = []
+    bypassable: list[PtpConflict] = []
+    for conflict in _find_conflicts(active_cpts, store):
+        if conflict.modifier_indicator == "0":
+            hard.append(conflict)
+        else:
+            bypassable.append(conflict)
+    return hard, bypassable
+
+
+def ptp_hard_bundle_detail(
+    conflict: PtpConflict,
+    *,
+    mode: Literal["batch", "live"] = "batch",
+) -> str:
+    if mode == "live":
+        return (
+            f"{conflict.component} bundled into {conflict.primary}; "
+            "hard NCCI edit (no modifier)."
+        )
+    return f"{conflict.component} bundled into primary code; hard NCCI edit (no modifier)."
+
+
+def build_bypassable_conflict(conflict: PtpConflict, store: MetadataStore) -> BillingConflict:
     component = conflict.component
     primary = conflict.primary
     conflict_id = f"ncci_{component}_{primary}"
@@ -104,6 +133,10 @@ def _build_bypassable_conflict(conflict: PtpConflict, store: MetadataStore) -> B
     )
 
 
+# Backward-compatible alias for internal imports.
+_build_bypassable_conflict = build_bypassable_conflict
+
+
 def resolve_ptp_conflicts(
     active_cpts: set[str],
     store: MetadataStore,
@@ -114,27 +147,22 @@ def resolve_ptp_conflicts(
     list[AutoAppliedChange],
     list[BillingConflict],
 ]:
+    """Batch-mode PTP: auto-remove hard bundles and surface bypassable conflicts."""
     removed: set[str] = set()
     removed_records: list[RemovedCode] = []
     therapist_actions: list[TherapistAction] = []
     changes: list[AutoAppliedChange] = []
     billing_conflicts: list[BillingConflict] = []
 
-    conflicts = _find_conflicts(active_cpts, store)
-    hard_components: set[str] = set()
-    bypassable: list[PtpConflict] = []
-
-    for conflict in conflicts:
-        if conflict.modifier_indicator == "0":
-            hard_components.add(conflict.component)
-        else:
-            bypassable.append(conflict)
+    hard, bypassable = classify_ptp_conflicts(active_cpts, store)
+    hard_components = {conflict.component for conflict in hard}
 
     for component in sorted(hard_components):
         if component not in active_cpts:
             continue
         removed.add(component)
-        detail = f"{component} bundled into primary code; hard NCCI edit (no modifier)."
+        conflict = next(c for c in hard if c.component == component)
+        detail = ptp_hard_bundle_detail(conflict, mode="batch")
         removed_records.append(
             RemovedCode(
                 cpt_code=component,
@@ -154,7 +182,7 @@ def resolve_ptp_conflicts(
     for conflict in bypassable:
         if conflict.component in removed:
             continue
-        billing_conflict = _build_bypassable_conflict(conflict, store)
+        billing_conflict = build_bypassable_conflict(conflict, store)
         billing_conflicts.append(billing_conflict)
         therapist_actions.append(
             TherapistAction(

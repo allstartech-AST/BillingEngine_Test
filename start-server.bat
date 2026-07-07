@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0backend"
+echo Starting Billing Engine from: %CD%
 set PY=%LocalAppData%\Programs\Python\Python312\python.exe
 if not exist "%PY%" (
   echo Python not found at %PY%

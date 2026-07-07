@@ -73,22 +73,22 @@
     rowsEl.innerHTML = rows
       .map(function (row) {
         return (
-          "<div class=\"llm-edit-row grid grid-cols-[0.9fr_0.6fr_1fr_auto] gap-2 items-end rounded-lg border border-slate-200/80 bg-slate-50/50 p-2\" data-row-id=\"" +
+          "<div class=\"llm-edit-row grid grid-cols-[0.9fr_0.6fr_1fr_auto] gap-2 items-end rounded-2xl border border-blue-100 bg-white/80 p-3 shadow-sm\" data-row-id=\"" +
           escapeHtmlFn(row.id) +
           "\">" +
-          "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400\">CPT</span>" +
-          "<input type=\"text\" class=\"llm-input-cpt w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-mono text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20\" value=\"" +
+          "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400\">CPT</span>" +
+          "<input type=\"text\" class=\"llm-input-cpt w-full rounded-xl border border-blue-100 bg-white px-2.5 py-2 text-xs font-mono text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 shadow-sm\" value=\"" +
           escapeHtmlFn(row.cpt) +
           "\" placeholder=\"97110\" /></label>" +
-          "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400\">Min</span>" +
-          "<input type=\"number\" min=\"1\" step=\"1\" class=\"llm-input-duration w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20\" value=\"" +
+          "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400\">Min</span>" +
+          "<input type=\"number\" min=\"1\" step=\"1\" class=\"llm-input-duration w-full rounded-xl border border-blue-100 bg-white px-2.5 py-2 text-xs text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 shadow-sm\" value=\"" +
           escapeHtmlFn(String(row.duration)) +
           "\" /></label>" +
-          "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400\">Region</span>" +
-          "<input type=\"text\" class=\"llm-input-region w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20\" value=\"" +
+          "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400\">Region</span>" +
+          "<input type=\"text\" class=\"llm-input-region w-full rounded-xl border border-blue-100 bg-white px-2.5 py-2 text-xs text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 shadow-sm\" value=\"" +
           escapeHtmlFn(row.region) +
           "\" placeholder=\"Optional\" /></label>" +
-          "<button type=\"button\" class=\"llm-remove-row flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500\" aria-label=\"Remove row\">✕</button>" +
+          "<button type=\"button\" class=\"llm-remove-row flex h-9 w-9 items-center justify-center rounded-xl border border-blue-100 text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500\" aria-label=\"Remove row\">✕</button>" +
           "</div>"
         );
       })
@@ -144,9 +144,9 @@
     var rows = (result.codes || [])
       .map(function (row) {
         return (
-          "<tr class=\"bg-white\">" +
+          "<tr class=\"bg-white/90\">" +
           "<td class=\"px-2 py-2 font-mono text-xs font-semibold text-ast-navy\">" + escapeHtmlFn(row.cpt) + "</td>" +
-          "<td class=\"px-2 py-2 text-center text-xs\">" + escapeHtmlFn(String(row.minutes)) + "</td>" +
+          "<td class=\"px-2 py-2 text-center text-xs text-slate-600\">" + escapeHtmlFn(String(row.minutes)) + "</td>" +
           "<td class=\"px-2 py-2 text-center text-xs font-bold text-ast-navy\">" + escapeHtmlFn(String(row.units)) + "</td>" +
           "<td class=\"px-2 py-2 text-[11px] leading-relaxed text-slate-600\">" + escapeHtmlFn(row.explanation || "") + "</td>" +
           "</tr>"
@@ -155,22 +155,22 @@
       .join("");
 
     resultsEl.innerHTML =
-      "<div class=\"rounded-xl border border-slate-200/80 bg-slate-50/50 p-3\">" +
+      "<div class=\"rounded-2xl border border-blue-100 bg-white/85 p-3 shadow-sm\">" +
       "<div class=\"mb-3 flex items-center justify-between gap-2\">" +
       "<p class=\"text-xs font-bold text-ast-navy\">Calculated Units</p>" +
-      "<span class=\"rounded-full border border-ast-blue/20 bg-ast-tint px-2 py-0.5 text-[10px] font-bold text-ast-blue\">" +
+      "<span class=\"rounded-full border border-blue-200 bg-ast-tint px-2.5 py-1 text-[10px] font-bold text-ast-blue shadow-sm\">" +
       escapeHtmlFn(result.rule_label || result.rule_applied || "") +
       "</span></div>" +
-      "<div class=\"mb-3 rounded-lg border border-slate-100 bg-white px-3 py-2\">" +
-      "<p class=\"text-[10px] font-bold uppercase tracking-wider text-slate-400\">Total Units</p>" +
+      "<div class=\"mb-3 rounded-xl border border-blue-100 bg-white px-3 py-2.5 shadow-sm\">" +
+      "<p class=\"text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400\">Total Units</p>" +
       "<p class=\"text-2xl font-extrabold text-ast-navy\">" + escapeHtmlFn(String(result.total_units)) + "</p></div>" +
-      "<div class=\"overflow-x-auto overflow-y-hidden rounded-lg border border-slate-200/80\">" +
-      "<table class=\"min-w-full text-xs\"><thead class=\"bg-slate-100/80\"><tr>" +
+      "<div class=\"overflow-x-auto overflow-y-hidden rounded-xl border border-blue-100\">" +
+      "<table class=\"min-w-full text-xs\"><thead class=\"bg-blue-50/70\"><tr>" +
       "<th class=\"px-2 py-2 text-left font-bold text-slate-500\">CPT</th>" +
       "<th class=\"px-2 py-2 text-center font-bold text-slate-500\">Minutes</th>" +
       "<th class=\"px-2 py-2 text-center font-bold text-slate-500\">Units</th>" +
       "<th class=\"px-2 py-2 text-left font-bold text-slate-500\">Explanation</th>" +
-      "</tr></thead><tbody class=\"divide-y divide-slate-100\">" + rows + "</tbody></table></div>" +
+      "</tr></thead><tbody class=\"divide-y divide-blue-50\">" + rows + "</tbody></table></div>" +
       (result.notes
         ? "<p class=\"mt-3 text-[11px] leading-relaxed text-slate-500\">" + escapeHtmlFn(result.notes) + "</p>"
         : "") +

@@ -1,8 +1,6 @@
-from app.engine.aoc import validate_addon_codes
+from app.engine.conflict_evaluation import evaluate_cpt_conflicts
 from app.engine.icd10 import validate_medical_necessity
 from app.engine.loader import MetadataStore
-from app.engine.mue import check_mue_zero
-from app.engine.ptp import PtpConflict, _build_bypassable_conflict, _find_conflicts
 from app.models.live import LiveCptRow
 from app.models.output import BillingConflict, Issue
 
@@ -12,14 +10,6 @@ def active_cpt_codes(rows: list[LiveCptRow]) -> set[str]:
         row.cpt_code
         for row in rows
         if row.lifecycle not in ("removed", "error")
-    }
-
-
-def billable_cpt_codes(rows: list[LiveCptRow]) -> set[str]:
-    return {
-        row.cpt_code
-        for row in rows
-        if row.lifecycle not in ("removed", "error", "manual_billing")
     }
 
 
@@ -38,46 +28,8 @@ def incremental_conflicts(
     active_cpts: set[str],
     store: MetadataStore,
 ) -> tuple[list[BillingConflict], list[Issue], set[str]]:
-    """Evaluate PTP/AOC/MUE for the current active CPT set (live mode: no auto-remove)."""
-    issues: list[Issue] = []
-    hard_removed: set[str] = set()
-    billing_conflicts: list[BillingConflict] = []
-
-    addon_removed, addon_records, _, _ = validate_addon_codes(active_cpts, store)
-    for record in addon_records:
-        hard_removed.add(record.cpt_code)
-        issues.append(
-            Issue(
-                severity="error",
-                code=record.cpt_code,
-                message=record.details,
-            )
-        )
-
-    mue_zero, mue_records, _, mue_issues = check_mue_zero(active_cpts - hard_removed, store)
-    hard_removed |= mue_zero
-    for record in mue_records:
-        issues.append(
-            Issue(severity="error", code=record.cpt_code, message=record.details)
-        )
-    issues.extend(mue_issues)
-
-    remaining = active_cpts - hard_removed
-    ptp_raw = _find_conflicts(remaining, store)
-    for conflict in ptp_raw:
-        if conflict.modifier_indicator == "0":
-            hard_removed.add(conflict.component)
-            detail = (
-                f"{conflict.component} bundled into {conflict.primary}; "
-                "hard NCCI edit (no modifier)."
-            )
-            issues.append(
-                Issue(severity="error", code=conflict.component, message=detail)
-            )
-        else:
-            billing_conflicts.append(_build_bypassable_conflict(conflict, store))
-
-    return billing_conflicts, issues, hard_removed
+    """Evaluate add-on/PTP/MUE for the active CPT set (live mode: mark removed, no auto-delete)."""
+    return evaluate_cpt_conflicts(active_cpts, store)
 
 
 def icd_pending_for_cpt(

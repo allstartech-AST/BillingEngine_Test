@@ -11,18 +11,72 @@ def load_env_files() -> None:
     load_dotenv(PROJECT_ROOT / ".env.local", override=True)
 
 
-def gemini_api_key() -> str | None:
+def openai_api_key() -> str | None:
     import os
 
     load_env_files()
-    return os.environ.get("GEMINI_API_KEY") or os.environ.get("VITE_GEMINI_API_KEY")
+    return os.environ.get("GROQ_API_KEY") or os.environ.get("OPENAI_API_KEY")
 
 
-def gemini_audit_model() -> str:
+def openai_model() -> str:
     import os
 
     load_env_files()
-    return os.environ.get("GEMINI_AUDIT_MODEL", "gemini-2.5-flash")
+    return (
+        os.environ.get("GROQ_MODEL")
+        or os.environ.get("OPENAI_MODEL")
+        or "llama-3.1-8b-instant"
+    )
+
+
+def llm_provider_name() -> str:
+    import os
+
+    load_env_files()
+    return "Groq" if os.environ.get("GROQ_API_KEY") else "OpenAI"
+
+
+def groq_base_url() -> str:
+    import os
+
+    load_env_files()
+    return os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+
+
+def _env_int(name: str, default: int) -> int:
+    import os
+
+    load_env_files()
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    import os
+
+    load_env_files()
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+# Live AI enrichment cadence and suggest-missing transcript caps (Phase 1).
+LLM_SENTENCES_PER_AI_BATCH = _env_int("LLM_SENTENCES_PER_AI_BATCH", 40)
+LLM_SUGGEST_CONTEXT_CHARS = _env_int("LLM_SUGGEST_CONTEXT_CHARS", 200)
+LLM_SUGGEST_MIN_DELTA_CHARS = _env_int("LLM_SUGGEST_MIN_DELTA_CHARS", 150)
+LLM_SUGGEST_MAX_DELTA_CHARS = _env_int("LLM_SUGGEST_MAX_DELTA_CHARS", 3000)
+
+# Live AI enrichment scheduling (Phase 5 — debounce + skip-if-busy).
+LLM_ENRICHMENT_DEBOUNCE_SECONDS = _env_float("LLM_ENRICHMENT_DEBOUNCE_SECONDS", 3.0)
 
 
 DATA_DIR = PROJECT_ROOT / "data"

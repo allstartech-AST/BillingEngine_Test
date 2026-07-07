@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from app.engine import ama_rule
 from app.engine.eight_minute import calculate_units as calculate_units_cms
+from app.engine.llm_billing_common import ruleset_label
 from app.engine.loader import MetadataStore
 
 FALLBACK_MESSAGE = (
@@ -17,6 +19,8 @@ FALLBACK_MESSAGE = (
 )
 
 logger = logging.getLogger(__name__)
+
+SummaryAuditor = Literal["local", "openai", "auto"]
 
 
 class SummaryValidateLine(BaseModel):
@@ -29,6 +33,7 @@ class SummaryValidateLine(BaseModel):
 class SummaryValidateRequest(BaseModel):
     lines: list[SummaryValidateLine]
     billing_rule: str = "cms_8_minute"
+    auditor: SummaryAuditor = "local"
 
 
 class SummaryValidateRow(BaseModel):
@@ -46,14 +51,12 @@ class SummaryValidateResponse(BaseModel):
     rule_label: str
     overall_status: str
     rows: list[SummaryValidateRow]
-    auditor: str = "gemini"
+    auditor: str = "local"
     fallback_message: str | None = None
 
 
 def _rule_label(billing_rule: str) -> str:
-    if billing_rule == "ama_rule_of_8":
-        return "AMA Rule of Eight"
-    return "Medicare 8-Minute Rule"
+    return ruleset_label(billing_rule)
 
 
 def _build_segments(lines: list[SummaryValidateLine]) -> dict[str, dict]:
@@ -153,23 +156,30 @@ async def validate_summary_units(
     lines: list[SummaryValidateLine],
     billing_rule: str,
     store: MetadataStore,
+    *,
+    auditor: SummaryAuditor = "local",
 ) -> SummaryValidateResponse:
-    """Run independent Gemini validation; fall back to local rules if Gemini is unavailable."""
+    """Validate summary units — local engine by default; OpenAI when requested."""
     if not lines:
         return SummaryValidateResponse(
             billing_rule=billing_rule,
             rule_label=_rule_label(billing_rule),
             overall_status="PASSED",
             rows=[],
-            auditor="gemini",
+            auditor=auditor if auditor != "auto" else "local",
         )
 
-    from app.engine.gemini_errors import GeminiAuditError
-    from app.engine.summary_gemini_validation import validate_summary_units_gemini
+    if auditor == "local":
+        return validate_summary_units_local(lines, billing_rule, store)
+
+    from app.engine.llm_errors import LlmAuditError
+    from app.engine.summary_llm_validation import validate_summary_units_llm
 
     try:
-        return await validate_summary_units_gemini(lines, billing_rule, store)
-    except (GeminiAuditError, asyncio.TimeoutError, TimeoutError) as exc:
+        return await validate_summary_units_llm(lines, billing_rule, store)
+    except (LlmAuditError, asyncio.TimeoutError, TimeoutError) as exc:
+        if auditor == "openai":
+            raise
         detail = getattr(exc, "info", None)
         if detail is not None:
             logger.warning(
@@ -186,8 +196,10 @@ async def validate_summary_units(
                 "fallback_message": FALLBACK_MESSAGE,
             }
         )
-    except Exception as exc:
-        logger.exception("Unexpected Gemini summary validation error")
+    except Exception:
+        if auditor == "openai":
+            raise
+        logger.exception("Unexpected OpenAI summary validation error")
         local = validate_summary_units_local(lines, billing_rule, store)
         return local.model_copy(
             update={

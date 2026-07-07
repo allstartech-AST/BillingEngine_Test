@@ -1,9 +1,14 @@
 from datetime import datetime
 
-from app.config import MODIFIERS
 from app.engine.icd10 import _icd_in_crosswalk, resolve_ranked_icd
 from app.engine.loader import MetadataStore
 from app.engine.provisional_units import calculate_provisional_unit_maps
+from app.engine.ui_conflict_cards import (
+    build_batch_ncci_presentation,
+    build_overlap_presentation,
+    overlap_conflict,
+    primary_ncci_conflict,
+)
 from app.models.input import BillingSessionInput
 from app.models.output import (
     BillableCode,
@@ -87,24 +92,6 @@ def _format_session_datetime(iso_value: str) -> str:
         return dt.strftime("%B %d, %I:%M %p").replace(" 0", " ")
     except ValueError:
         return iso_value
-
-
-def _primary_ncci_conflict(
-    cpt: str, conflicts: list[BillingConflict]
-) -> BillingConflict | None:
-    for conflict in conflicts:
-        if conflict.conflict_type != "bypassable_bundle":
-            continue
-        if cpt in conflict.codes:
-            return conflict
-    return None
-
-
-def _overlap_conflict(cpt: str, conflicts: list[BillingConflict]) -> BillingConflict | None:
-    for conflict in conflicts:
-        if conflict.conflict_type == "overlap" and cpt in conflict.codes:
-            return conflict
-    return None
 
 
 def build_ui_display(
@@ -194,57 +181,29 @@ def build_ui_display(
         suggestions: list[UiSuggestion] = []
         actions = UiCptActions()
 
-        ncci = _primary_ncci_conflict(cpt, billing_conflicts)
-        overlap = _overlap_conflict(cpt, billing_conflicts)
+        ncci = primary_ncci_conflict(cpt, billing_conflicts)
+        overlap = overlap_conflict(cpt, billing_conflicts)
 
         if ncci_pending and ncci:
-            conflict_id = ncci.conflict_id
-            conflict_with = (
-                ncci.column_one_code
-                if cpt == ncci.column_two_code
-                else ncci.column_two_code or ncci.column_one_code
-            )
-            modifier_labels = ", ".join(f"-{m}" for m in MODIFIERS)
-            applies_here = cpt == ncci.column_two_code or ncci.modifier_applies_to == cpt
-            if applies_here:
-                badge = "Modifier 59 Required"
-                modifiers = list(MODIFIERS)
-                conflict_message = (
-                    f"NCCI bundle with Column 1 code {conflict_with}. If this was a distinct "
-                    f"separate service, apply {modifier_labels} to {cpt}."
-                )
-            else:
-                badge = "Review Required"
-                col2 = ncci.column_two_code or conflict_with
-                conflict_message = (
-                    f"NCCI bundle with {conflict_with}. Column 2 ({col2}) may need "
-                    f"{modifier_labels} if billed as distinct from Column 1."
-                )
-            actions = UiCptActions(reject_enabled=True, approve_enabled=True)
-            suggestions.append(
-                UiSuggestion(
-                    type="ncci_bundling",
-                    severity="action_required",
-                    summary=conflict_message,
-                    conflict_id=conflict_id,
-                    modifiers=modifiers,
-                )
-            )
+            presentation = build_batch_ncci_presentation(cpt, ncci, ncci_pending=True)
+            if presentation:
+                badge = presentation.badge
+                conflict_message = presentation.conflict_message
+                conflict_with = presentation.conflict_with
+                conflict_id = presentation.conflict_id
+                modifiers = presentation.modifiers
+                actions = presentation.actions
+                if presentation.suggestion:
+                    suggestions.append(presentation.suggestion)
         elif overlap_pending and overlap:
-            conflict_id = overlap.conflict_id
-            others = [code for code in overlap.codes if code != cpt]
-            conflict_with = others[0] if others else None
-            badge = "Review Required"
-            conflict_message = overlap.issue
-            actions = UiCptActions(reject_enabled=True, approve_enabled=True)
-            suggestions.append(
-                UiSuggestion(
-                    type="temporal_overlap",
-                    severity="action_required",
-                    summary=overlap.issue,
-                    conflict_id=conflict_id,
-                )
-            )
+            presentation = build_overlap_presentation(cpt, overlap)
+            conflict_id = presentation.conflict_id
+            conflict_with = presentation.conflict_with
+            badge = presentation.badge
+            conflict_message = presentation.conflict_message
+            actions = presentation.actions
+            if presentation.suggestion:
+                suggestions.append(presentation.suggestion)
 
         if icd_pending:
             diag = diagnosis_by_cpt.get(cpt)

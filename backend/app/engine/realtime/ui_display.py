@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-from app.config import MODIFIERS
 from app.engine.icd10 import _icd_in_crosswalk
 from app.engine.loader import MetadataStore
 from app.engine.realtime.rules import icd_pending_for_cpt, unresolved_bypassable
@@ -36,15 +35,10 @@ _REMOVAL_LABELS = {
 }
 
 
-def _primary_ncci_conflict(
-    cpt: str, conflicts: list[BillingConflict]
-) -> BillingConflict | None:
-    for conflict in conflicts:
-        if conflict.conflict_type != "bypassable_bundle":
-            continue
-        if cpt in conflict.codes:
-            return conflict
-    return None
+from app.engine.ui_conflict_cards import (
+    build_live_ncci_presentation,
+    primary_ncci_conflict,
+)
 
 
 def visible_live_cpt_rows(cpts: list[LiveCptRow]) -> list[LiveCptRow]:
@@ -145,7 +139,7 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
             units_display = 0
             duration_display = "—"
 
-        ncci = _primary_ncci_conflict(row.cpt_code, open_conflicts)
+        ncci = primary_ncci_conflict(row.cpt_code, open_conflicts)
         badge = None
         conflict_message = None
         conflict_with = None
@@ -235,53 +229,22 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
         if ncci and (is_pending or is_detected or is_completed):
             card_style = "review"
             verification = "pending_review"
-            conflict_with = (
-                ncci.column_one_code
-                if row.cpt_code == ncci.column_two_code
-                else ncci.column_two_code or ncci.column_one_code
+            presentation = build_live_ncci_presentation(
+                row.cpt_code,
+                ncci,
+                include_conflict=True,
+                existing_badge=badge,
             )
-            modifier_labels = ", ".join(f"-{m}" for m in MODIFIERS)
-            applies_here = (
-                row.cpt_code == ncci.column_two_code or ncci.modifier_applies_to == row.cpt_code
-            )
-            indicator = ncci.modifier_indicator or "1"
-            if applies_here:
-                badge = "Modifier 59 Required"
-                modifiers = list(MODIFIERS)
-                ai_enriched_applied = False
-                if ncci.ai_enriched:
-                    for rec in ncci.recommendations:
-                        if rec.action == "apply_modifier":
-                            modifiers = rec.modifiers or []
-                            conflict_message = rec.summary
-                            ai_enriched_applied = True
-                            break
-                if not ai_enriched_applied:
-                    conflict_message = (
-                        f"NCCI bundle with Column 1 code {conflict_with} (modifier indicator {indicator}). "
-                        f"If this was a distinct separate service, apply {modifier_labels} to {row.cpt_code}."
-                    )
-            else:
-                badge = badge or "Review Required"
-                col2 = ncci.column_two_code or conflict_with
-                conflict_message = (
-                    f"NCCI bundle with {conflict_with} (modifier indicator {indicator}). "
-                    f"Please resolve this conflict on the Column 2 code ({col2})."
-                )
-            
-            if applies_here:
-                conflict_id = ncci.conflict_id
-                actions.approve_enabled = True
-                actions.reject_enabled = True
-            suggestions.append(
-                UiSuggestion(
-                    type="ncci_bundling",
-                    severity="action_required",
-                    summary=conflict_message,
-                    conflict_id=conflict_id,
-                    modifiers=modifiers,
-                )
-            )
+            if presentation:
+                conflict_with = presentation.conflict_with
+                conflict_message = presentation.conflict_message
+                conflict_id = presentation.conflict_id
+                modifiers = presentation.modifiers
+                actions = presentation.actions
+                if presentation.badge:
+                    badge = presentation.badge
+                if presentation.suggestion:
+                    suggestions.append(presentation.suggestion)
 
         icd_guidance = row.icd_guidance
         if not icd_guidance and "icd_medical_necessity" in row.pending_reasons:

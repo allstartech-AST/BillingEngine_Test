@@ -1,32 +1,43 @@
 import json
-import asyncio
 from typing import Any, Literal
 
-from app.config import gemini_api_key, gemini_audit_model, load_env_files
-from app.engine.gemini_billing_rules import (
-    build_gemini_billing_payload,
-    timing_rules_system_instructions,
+from app.config import openai_model, load_env_files
+from app.engine.llm_billing_rules import timing_rules_system_instructions
+from app.engine.llm_errors import LlmAuditError, LlmErrorInfo
+from app.engine.llm_billing_common import (
+    build_billing_payload,
+    call_openai_json_schema,
+    ruleset_label,
 )
-from app.engine.gemini_errors import GeminiAuditError, GeminiErrorInfo, classify_gemini_error
+from app.engine.llm_unit_core import calculator_raw_lines, run_llm_billing_calculation
 from app.engine.loader import load_metadata
 
 load_env_files()
 
 SYSTEM_PROMPT = f"""You are a US healthcare billing compliance auditor for outpatient rehabilitation therapy (PT/OT/SLP).
 
-Your task is to validate ONLY the billing summary JSON provided by the user.
+Validate ONLY the billing summary JSON provided by the user.
 
 {timing_rules_system_instructions()}
 
-Additional rules:
-- Use ONLY the billing summary data. Never infer, reconstruct, or reference any therapy transcript.
-- Never mention a transcript in your response.
-- Recalculate expected billable units from each line's documented duration_minutes.
-- Compare your recalculated expected_units against the engine_units provided in each summary line.
-- Mark each line PASSED when expected_units equals engine_units; otherwise FAILED with concise reasoning.
-- Set overall_validation to FAILED if any line fails.
+RULES:
+- Use ONLY the billing summary data. Never infer, reconstruct, or reference any therapy transcript. Never mention a transcript.
+- Apply the timing rule named in the input JSON "rule" field. Do not choose a different rule.
+- Set rule_applied to exactly "Medicare 8-Minute" when the input rule is Medicare 8-Minute Rule, or "AMA Rule of 8" when the input rule is AMA Rule of Eight.
+- For each line:
+  - If the CPT is untimed (per the timing rules), expected_units = 1 per documented occurrence, regardless of duration_minutes.
+  - If the CPT is timed, recalculate expected_units strictly from duration_minutes using the applicable rule. Do not round informally — apply the rule's exact minute thresholds.
+  - If duration_minutes is missing, null, zero, or negative, mark status = FAILED with reasoning stating the data issue. Do not guess a value.
+  - If the CPT code is not recognized under the timing rules provided, mark status = FAILED with reasoning stating the code is unrecognized. Do not assume a rule for it.
+  - Compare expected_units to engine_units. status = PASSED only if they match exactly.
+  - On FAILED, reasoning must state: the duration/minutes used, the rule applied, the expected_units calculated, and the engine_units provided.
+- overall_validation = FAILED if any line is FAILED or has a data issue, otherwise PASSED.
+- auditor_notes: 1-2 sentences. Summarize only FAILED lines and systemic issues (e.g., repeated pattern of miscalculation, unrecognized codes). Leave brief if all PASSED.
+- Every numeric field (expected_units, engine_units) must be a plain number — no strings, no ranges, no rounding symbols.
+- Do not skip, merge, or omit any line from the input. Every input line must produce exactly one output line.
+- If uncertain about any calculation, do not guess — mark that line FAILED with reasoning explaining the uncertainty.
 
-You MUST return ONLY valid JSON matching the required schema."""
+Return ONLY valid JSON matching the required schema. No extra text, no commentary outside the JSON."""
 
 
 RESPONSE_SCHEMA: dict[str, Any] = {
@@ -69,12 +80,6 @@ RESPONSE_SCHEMA: dict[str, Any] = {
 }
 
 
-def _ruleset_label(billing_rule: str) -> str:
-    if billing_rule == "ama_rule_of_8":
-        return "AMA Rule of Eight"
-    return "Medicare 8-Minute Rule"
-
-
 def _build_user_prompt(
     billing_summary: list[dict[str, Any]],
     billing_rule: str,
@@ -92,21 +97,26 @@ def _build_user_prompt(
         }
         for line in billing_summary
     ]
-    payload = build_gemini_billing_payload(
-        raw_lines,
-        billing_rule,
-        _ruleset_label(billing_rule),
-        store,
-    )
+    payload = build_billing_payload(raw_lines, billing_rule, store)
 
     return (
         "Validate the following billing summary. Treat it as the single source of truth.\n"
         "Do not use or reference any therapy transcript.\n"
+        "Apply the timing rule in the payload \"rule\" field only.\n"
+        "Set rule_applied to \"Medicare 8-Minute\" or \"AMA Rule of 8\" to match that rule.\n"
         "Use timed_pool_minutes for Medicare pooling — untimed minutes must not enter the pool.\n\n"
         f"{json.dumps(payload, indent=2)}\n\n"
-        "Recalculate expected_units from each line using the specified rule. "
-        "Compare expected_units to engine_units for each CPT. "
-        "Return per-line status, overall_validation, and concise auditor_notes."
+        "For each line:\n"
+        "- If untimed, expected_units = 1 per documented occurrence.\n"
+        "- If timed, recalculate expected_units strictly from duration_minutes using the specified rule "
+        "(exact thresholds, no informal rounding).\n"
+        "- If duration_minutes is missing, null, zero, or negative, mark status FAILED and state the data issue.\n"
+        "- If the CPT is unrecognized under the ruleset, mark status FAILED and state that.\n"
+        "- Compare expected_units to engine_units; status PASSED only on exact match. "
+        "On FAILED, state duration used, rule applied, expected_units, and engine_units.\n"
+        "Every input line must produce exactly one output line — do not skip, merge, or omit.\n"
+        "Set overall_validation FAILED if any line FAILED. "
+        "Return rule_applied, overall_validation, per-line results, and concise auditor_notes."
     )
 
 
@@ -117,7 +127,7 @@ def _normalize_modifier(value: str | None) -> Literal["59"] | None:
 
 
 def _normalize_audit_response(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Map Gemini schema to the shape expected by the prototype comparison UI."""
+    """Map LLM schema to the shape expected by the prototype comparison UI."""
     lines = parsed.get("lines") or []
     calculated_codes = [
         {
@@ -141,115 +151,40 @@ def _normalize_audit_response(parsed: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _response_text(response) -> str:
-    text = getattr(response, "text", None)
-    if text:
-        return text
-    candidates = getattr(response, "candidates", None) or []
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        if not content:
-            continue
-        for part in getattr(content, "parts", None) or []:
-            part_text = getattr(part, "text", None)
-            if part_text:
-                return part_text
-    raise GeminiAuditError(
-        GeminiErrorInfo(
-            category="gemini_api_error",
-            message="Gemini returned an empty response. Try verification again.",
-            http_status=502,
-            technical_detail="No text content in Gemini response.",
-            model=gemini_audit_model(),
-        )
-    )
-
-
-_RETRYABLE_STATUS = {429, 503}
-_MAX_ATTEMPTS = 3
-
-
 async def run_compliance_audit(
     billing_summary: list[dict[str, Any]],
     billing_rule: str,
 ) -> dict[str, Any]:
     if not billing_summary:
-        raise GeminiAuditError(
-            GeminiErrorInfo(
-                category="gemini_api_error",
+        raise LlmAuditError(
+            LlmErrorInfo(
+                category="llm_api_error",
                 message="No billing summary lines to audit.",
                 http_status=400,
                 technical_detail="billing_summary is empty",
             )
         )
 
-    api_key = gemini_api_key()
-    if not api_key:
-        raise GeminiAuditError(
-            GeminiErrorInfo(
-                category="missing_api_key",
-                message=(
-                    "Gemini API key is not configured. Add GEMINI_API_KEY to .env.local "
-                    "and restart the server."
-                ),
-                http_status=503,
-                technical_detail="GEMINI_API_KEY and VITE_GEMINI_API_KEY are both unset.",
-            )
-        )
-
-    from google import genai
-    from google.genai import types
-
     store = load_metadata()
-    model_name = gemini_audit_model()
-    client = genai.Client(api_key=api_key)
+    model_name = openai_model()
     prompt = _build_user_prompt(billing_summary, billing_rule, store)
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        response_mime_type="application/json",
-        response_schema=RESPONSE_SCHEMA,
-        temperature=0.1,
-    )
-
-    response = None
-    last_error: GeminiAuditError | None = None
-    for attempt in range(_MAX_ATTEMPTS):
-        try:
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=config,
-            )
-            last_error = None
-            break
-        except Exception as exc:
-            info = classify_gemini_error(exc, model=model_name)
-            last_error = GeminiAuditError(info)
-            if info.http_status in _RETRYABLE_STATUS and attempt < _MAX_ATTEMPTS - 1:
-                await asyncio.sleep(2 ** attempt)
-                continue
-            raise last_error from exc
-
-    if response is None:
-        raise last_error or GeminiAuditError(
-            GeminiErrorInfo(
-                category="gemini_api_error",
-                message="Gemini audit failed after multiple attempts.",
-                http_status=502,
-                technical_detail="No response received.",
-                model=model_name,
-            )
-        )
 
     try:
-        parsed = json.loads(_response_text(response))
+        parsed = await call_openai_json_schema(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=prompt,
+            json_schema=RESPONSE_SCHEMA,
+            failure_message="OpenAI audit failed after multiple attempts.",
+        )
+    except LlmAuditError:
+        raise
     except json.JSONDecodeError as exc:
-        raise GeminiAuditError(
-            GeminiErrorInfo(
-                category="gemini_api_error",
-                message="Gemini returned a response that could not be parsed as JSON. Try again.",
+        raise LlmAuditError(
+            LlmErrorInfo(
+                category="llm_api_error",
+                message="OpenAI returned a response that could not be parsed as JSON. Try again.",
                 http_status=502,
-                technical_detail=_response_text(response)[:500] if response else "",
+                technical_detail=str(exc),
                 model=model_name,
             )
         ) from exc
@@ -257,6 +192,42 @@ async def run_compliance_audit(
     normalized = _normalize_audit_response(parsed)
     normalized["modifier_required"] = _normalize_modifier(normalized.get("modifier_required"))
     return normalized
+
+
+async def run_calculator_audit(
+    rows: list[dict[str, Any]],
+    billing_rule: str,
+) -> dict[str, Any]:
+    if not rows:
+        raise LlmAuditError(
+            LlmErrorInfo(
+                category="llm_api_error",
+                message="Add at least one CPT code before running verification.",
+                http_status=400,
+                technical_detail="rows is empty",
+            )
+        )
+
+    store = load_metadata()
+    parsed = await run_llm_billing_calculation(
+        calculator_raw_lines(rows),
+        billing_rule,
+        mode="audit",
+        store=store,
+    )
+
+    modifier = parsed.get("modifier_required")
+    if modifier not in ("59", None):
+        modifier = None
+
+    return {
+        **parsed,
+        "modifier_required": modifier,
+        "calculated_codes": [
+            {**code, "cpt": str(code.get("cpt", "")).strip()}
+            for code in parsed.get("calculated_codes", [])
+        ],
+    }
 
 
 def build_summary_engine_snapshot(
@@ -279,25 +250,10 @@ def build_summary_engine_snapshot(
 
     return {
         "billing_rule": billing_rule,
-        "rule_label": _ruleset_label(billing_rule),
+        "rule_label": ruleset_label(billing_rule),
         "total_units": sum(code["units"] for code in codes),
         "modifier_suggested": None,
         "codes": codes,
-    }
-
-
-def build_engine_snapshot(
-    cpt_lines: list[dict[str, Any]],
-    total_units: int,
-    billing_rule: str,
-    modifier_suggested: str | None = None,
-) -> dict[str, Any]:
-    return {
-        "billing_rule": billing_rule,
-        "rule_label": _ruleset_label(billing_rule),
-        "total_units": total_units,
-        "modifier_suggested": modifier_suggested,
-        "codes": cpt_lines,
     }
 
 
@@ -318,9 +274,9 @@ def build_comparison(
     rows = []
     for cpt in sorted(all_cpts):
         eng = engine_codes.get(cpt)
-        gem = llm_codes.get(cpt)
+        llm_row = llm_codes.get(cpt)
         engine_units = eng["units"] if eng else None
-        llm_units = gem["units"] if gem else None
+        llm_units = llm_row["units"] if llm_row else None
         has_unit_mismatch = (
             engine_units is not None
             and llm_units is not None
@@ -335,7 +291,7 @@ def build_comparison(
                 "region": (eng or {}).get("region") or "",
                 "has_unit_mismatch": has_unit_mismatch,
                 "has_modifier_mismatch": session_modifier_mismatch,
-                "llm_explanation": (gem or {}).get("explanation"),
+                "llm_explanation": (llm_row or {}).get("explanation"),
             }
         )
 

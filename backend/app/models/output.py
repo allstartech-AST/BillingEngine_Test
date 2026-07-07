@@ -47,7 +47,7 @@ class BillableCode(BaseModel):
     duration_minutes_exact: float | None = None
     duration_minutes_billed: int | None = None
     units: int
-    unit_calculation_method: Literal["eight_minute_rule", "occurrence"]
+    unit_calculation_method: Literal["eight_minute_rule", "occurrence", "ama_rule_of_8"]
     is_timed: bool
     sequences: list[int] = Field(default_factory=list)
     billing_status: Literal["confirmed", "pending_therapist_review"] = "confirmed"

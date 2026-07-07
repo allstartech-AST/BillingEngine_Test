@@ -1,61 +1,18 @@
-"""Standalone Gemini unit calculator from manually entered CPT codes and durations."""
+"""Standalone OpenAI unit calculator from manually entered CPT codes and durations."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.config import gemini_api_key, gemini_audit_model, load_env_files
-from app.engine.gemini_billing_rules import (
-    build_gemini_billing_payload,
-    timing_rules_system_instructions,
-)
-from app.engine.gemini_errors import GeminiAuditError, GeminiErrorInfo, classify_gemini_error
+from app.config import load_env_files
+from app.engine.llm_billing_common import ruleset_label
+from app.engine.llm_errors import LlmAuditError, LlmErrorInfo
+from app.engine.llm_unit_core import run_llm_billing_calculation, unit_calc_raw_lines
 from app.engine.loader import load_metadata
 
 load_env_files()
-
-SYSTEM_PROMPT = f"""You are an expert in US outpatient rehabilitation therapy (PT/OT/SLP) billing unit calculations.
-
-Given CPT codes and durations in minutes, calculate billable units using ONLY the timing rule specified in the input.
-
-{timing_rules_system_instructions()}
-
-Do not validate against any billing engine, transcript, or patient summary.
-Do not compare to pre-assigned units.
-Only calculate units from the provided codes and minutes.
-
-Return ONLY valid JSON matching the required schema."""
-
-
-RESPONSE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "rule_applied": {
-            "type": "string",
-            "enum": ["Medicare 8-Minute", "AMA Rule of 8"],
-        },
-        "total_units": {"type": "number"},
-        "codes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "cpt": {"type": "string"},
-                    "minutes": {"type": "number"},
-                    "units": {"type": "number"},
-                    "explanation": {"type": "string"},
-                },
-                "required": ["cpt", "minutes", "units", "explanation"],
-            },
-        },
-        "notes": {"type": "string"},
-    },
-    "required": ["rule_applied", "total_units", "codes", "notes"],
-}
 
 
 class UnitCalcCode(BaseModel):
@@ -84,148 +41,27 @@ class UnitCalcResponse(BaseModel):
     notes: str
 
 
-def _ruleset_label(billing_rule: str) -> str:
-    if billing_rule == "ama_rule_of_8":
-        return "AMA Rule of Eight"
-    return "Medicare 8-Minute Rule"
-
-
-def _build_user_prompt(
-    codes: list[dict[str, Any]],
-    billing_rule: str,
-    store,
-) -> str:
-    raw_lines = [
-        {"cpt": code["cpt"], "minutes": code["minutes"], "duration_minutes": code["minutes"]}
-        for code in codes
-    ]
-    payload = build_gemini_billing_payload(
-        raw_lines,
-        billing_rule,
-        _ruleset_label(billing_rule),
-        store,
-    )
-    return (
-        "Calculate billable units for the following CPT codes and durations. "
-        "Use timed_pool_minutes for Medicare pooling (timed lines only).\n\n"
-        f"{json.dumps(payload, indent=2)}\n\n"
-        "Apply the specified timing rule and return units per code plus total_units. "
-        "total_units must sum timed-code units plus untimed occurrence units only."
-    )
-
-
-def _response_text(response) -> str:
-    text = getattr(response, "text", None)
-    if text:
-        return text
-    candidates = getattr(response, "candidates", None) or []
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        if not content:
-            continue
-        for part in getattr(content, "parts", None) or []:
-            part_text = getattr(part, "text", None)
-            if part_text:
-                return part_text
-    raise GeminiAuditError(
-        GeminiErrorInfo(
-            category="gemini_api_error",
-            message="Gemini returned an empty response. Try again.",
-            http_status=502,
-            technical_detail="No text content in Gemini response.",
-            model=gemini_audit_model(),
-        )
-    )
-
-
-_RETRYABLE_STATUS = {429, 503}
-_MAX_ATTEMPTS = 3
-
-
 async def run_unit_calculation(
     codes: list[dict[str, Any]],
     billing_rule: str,
 ) -> UnitCalcResponse:
     if not codes:
-        raise GeminiAuditError(
-            GeminiErrorInfo(
-                category="gemini_api_error",
+        raise LlmAuditError(
+            LlmErrorInfo(
+                category="llm_api_error",
                 message="Add at least one CPT code with a duration greater than 0.",
                 http_status=400,
                 technical_detail="codes list is empty",
             )
         )
 
-    api_key = gemini_api_key()
-    if not api_key:
-        raise GeminiAuditError(
-            GeminiErrorInfo(
-                category="missing_api_key",
-                message=(
-                    "Gemini API key is not configured. Add GEMINI_API_KEY to .env.local "
-                    "and restart the server."
-                ),
-                http_status=503,
-                technical_detail="GEMINI_API_KEY and VITE_GEMINI_API_KEY are both unset.",
-            )
-        )
-
-    from google import genai
-    from google.genai import types
-
     store = load_metadata()
-    model_name = gemini_audit_model()
-    client = genai.Client(api_key=api_key)
-    prompt = _build_user_prompt(codes, billing_rule, store)
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        response_mime_type="application/json",
-        response_schema=RESPONSE_SCHEMA,
-        temperature=0.1,
+    parsed = await run_llm_billing_calculation(
+        unit_calc_raw_lines(codes),
+        billing_rule,
+        mode="calculate",
+        store=store,
     )
-
-    response = None
-    last_error: GeminiAuditError | None = None
-    for attempt in range(_MAX_ATTEMPTS):
-        try:
-            response = await client.aio.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=config,
-            )
-            last_error = None
-            break
-        except Exception as exc:
-            info = classify_gemini_error(exc, model=model_name)
-            last_error = GeminiAuditError(info)
-            if info.http_status in _RETRYABLE_STATUS and attempt < _MAX_ATTEMPTS - 1:
-                await asyncio.sleep(2 ** attempt)
-                continue
-            raise last_error from exc
-
-    if response is None:
-        raise last_error or GeminiAuditError(
-            GeminiErrorInfo(
-                category="gemini_api_error",
-                message="Gemini calculation failed after multiple attempts.",
-                http_status=502,
-                technical_detail="No response received.",
-                model=model_name,
-            )
-        )
-
-    try:
-        parsed = json.loads(_response_text(response))
-    except json.JSONDecodeError as exc:
-        raise GeminiAuditError(
-            GeminiErrorInfo(
-                category="gemini_api_error",
-                message="Gemini returned a response that could not be parsed as JSON. Try again.",
-                http_status=502,
-                technical_detail=_response_text(response)[:500] if response else "",
-                model=model_name,
-            )
-        ) from exc
 
     code_results = [
         UnitCalcCodeResult(
@@ -240,7 +76,7 @@ async def run_unit_calculation(
 
     return UnitCalcResponse(
         rule_applied=str(parsed.get("rule_applied", "Medicare 8-Minute")),
-        rule_label=_ruleset_label(billing_rule),
+        rule_label=ruleset_label(billing_rule),
         total_units=total_units,
         codes=code_results,
         notes=str(parsed.get("notes", "")),

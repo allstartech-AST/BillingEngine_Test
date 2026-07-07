@@ -60,7 +60,12 @@ async def live_session_cpt_detect(session_id: str, body: LiveCptDetectRequest) -
 @router.post("/{session_id}/transcript/sentence", response_model=LiveSessionResponse)
 async def live_session_sentence(session_id: str, body: LiveTranscriptSentenceRequest) -> LiveSessionResponse:
     store = _live_store()
-    return on_sentence_fed(session_id, body.sentence, store)
+    return on_sentence_fed(
+        session_id,
+        body.sentence,
+        store,
+        sentence_count=body.sentence_count,
+    )
 
 
 @router.post("/{session_id}/cpt/start", response_model=LiveSessionResponse)

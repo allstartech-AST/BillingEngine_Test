@@ -1,29 +1,12 @@
 
 from app.engine.loader import MetadataStore
-from app.models.live import LiveSessionResponse, LiveClientInfo
-from app.engine.realtime.store import get_session, save_session, create_session
+from app.models.live import LiveSessionResponse
+from app.engine.realtime.store import get_session, save_session
 from app.engine.realtime.helpers import (
-    _append_icd, _parse_icd_input, _reactivate_session, _apply_icd_validation,
-    _revalidate_all_cpts_icd, _sync_row_messages, _next_sequence, _find_row,
-    _open_cpt_row, _live_response, _apply_conflict_pending,
-    _refresh_completed_rule_messages, _recalculate_units, _refresh_conflicts
+    _append_icd, _parse_icd_input, _reactivate_session,
+    _revalidate_all_cpts_icd, _sync_row_messages, _live_response,
+    _reconcile_billing_state_and_save,
 )
-from app.models.live import LiveCptRow
-from app.engine.realtime.rules import (
-    active_cpt_codes,
-    conflict_codes,
-    icd_pending_for_cpt,
-    incremental_conflicts,
-    unresolved_bypassable,
-    _issue_removal_reason,
-)
-from app.engine.mue import apply_mue_cap
-from app.engine.eight_minute import calculate_units as calculate_units_cms
-from app.engine import ama_rule
-from app.engine.icd10 import icd_code_variants
-
-
-from app.engine.transcript_medexa import validate_cpt_transcript_support, validate_icd10_transcript_support
 
 def on_icd_detected(session_id: str, icd10_code: str, store: MetadataStore) -> LiveSessionResponse:
     state = get_session(session_id)
@@ -38,10 +21,7 @@ def on_icd_detected(session_id: str, icd10_code: str, store: MetadataStore) -> L
     _revalidate_all_cpts_icd(state, store)
     for row in state.cpts:
         _sync_row_messages(row)
-    _refresh_conflicts(state, store)
-    _apply_conflict_pending(state)
-    _recalculate_units(state, store)
-    save_session(state)
+    _reconcile_billing_state_and_save(state, store)
     if added:
         msg = f"ICD added: {', '.join(added)}."
     elif before == len(state.icds):

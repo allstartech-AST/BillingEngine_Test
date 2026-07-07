@@ -93,7 +93,7 @@ def _find_row(cpts: list[LiveCptRow], cpt_code: str) -> LiveCptRow | None:
 
 def _open_cpt_row(cpts: list[LiveCptRow]) -> LiveCptRow | None:
     for row in reversed(cpts):
-        if row.lifecycle in ("detected", "billing", "manual_billing"):
+        if row.lifecycle in ("detected", "billing", "manual_billing", "pending_start", "running", "paused"):
             return row
     return None
 
@@ -250,5 +250,41 @@ def _refresh_conflicts(state: LiveSessionState, store: MetadataStore) -> None:
 
     state.conflicts = conflicts
     _apply_conflict_pending(state)
+
+
+def _reconcile_billing_state(state: LiveSessionState, store: MetadataStore) -> None:
+    """Refresh conflicts, re-apply pending flags, and recalculate units."""
+    _refresh_conflicts(state, store)
+    _apply_conflict_pending(state)
+    _recalculate_units(state, store)
+
+
+def _reconcile_billing_state_and_save(state: LiveSessionState, store: MetadataStore) -> None:
+    _reconcile_billing_state(state, store)
+    save_session(state)
+
+
+def _refresh_and_recalculate_billing(state: LiveSessionState, store: MetadataStore) -> None:
+    """Refresh hard conflicts and recalculate units without a second pending pass."""
+    _refresh_conflicts(state, store)
+    _recalculate_units(state, store)
+
+
+def _refresh_and_recalculate_billing_and_save(
+    state: LiveSessionState,
+    store: MetadataStore,
+) -> None:
+    _refresh_and_recalculate_billing(state, store)
+    save_session(state)
+
+
+def _pending_and_recalculate_billing(state: LiveSessionState, store: MetadataStore) -> None:
+    _apply_conflict_pending(state)
+    _recalculate_units(state, store)
+
+
+def _sync_all_row_messages(state: LiveSessionState) -> None:
+    for row in state.cpts:
+        _sync_row_messages(row)
 
 

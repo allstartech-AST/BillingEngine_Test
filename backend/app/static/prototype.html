@@ -31,8 +31,8 @@
 <body>
   <div id="root">
     <div class="min-h-screen bg-ast-bg flex flex-col">
-      <header class="h-16 bg-white border-b border-slate-200 flex items-center px-4 gap-3 sticky top-0 z-20 shadow-sm">
-        <button class="p-1.5 rounded-md hover:bg-slate-100 transition-colors flex-shrink-0">
+      <header class="h-16 bg-white/85 border-b border-blue-100 flex items-center px-4 gap-3 sticky top-0 z-20 shadow-sm backdrop-blur">
+        <button class="p-1.5 rounded-lg hover:bg-white transition-colors flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
             class="lucide lucide-menu text-slate-500" aria-hidden="true">
@@ -41,8 +41,9 @@
             <path d="M4 19h16"></path>
           </svg>
         </button>
-        <button class="font-extrabold text-xl flex-shrink-0 tracking-tight hover:opacity-80 transition-opacity">
-          <span class="text-ast-navy">Medexa</span><span class="text-ast-blue">.</span>
+        <button class="font-extrabold text-xl flex items-center gap-2 flex-shrink-0 tracking-tight hover:opacity-80 transition-opacity">
+          <span class="w-7 h-7 rounded-lg bg-gradient-to-br from-ast-blue to-ast-dark-blue flex items-center justify-center text-[11px] font-bold text-white shadow-md shadow-blue-200">M</span>
+          <span><span class="text-ast-navy">Medexa</span><span class="text-ast-blue">.</span></span>
         </button>
         <div class="hidden sm:block relative flex-1 max-w-72 mx-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -53,7 +54,7 @@
             <circle cx="11" cy="11" r="8"></circle>
           </svg>
           <input placeholder="Search patients or sessions..."
-            class="w-full pl-8 pr-3 py-1.5 rounded-full border border-slate-200 bg-ast-bg text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 transition-colors"
+            class="w-full pl-8 pr-3 py-2 rounded-full border border-blue-100 bg-white/85 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 transition-colors shadow-sm"
             type="text">
         </div>
         <div class="ml-auto flex items-center gap-0.5">
@@ -69,7 +70,7 @@
               <circle cx="4" cy="20" r="2"></circle>
             </svg>
           </button>
-          <button class="p-2 rounded-md hover:bg-slate-100 transition-colors relative">
+          <button class="p-2 rounded-md hover:bg-white transition-colors relative">
             <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
               class="lucide lucide-bell text-slate-500" aria-hidden="true">
@@ -82,7 +83,7 @@
           </button>
           <div class="relative">
             <button
-              class="flex items-center gap-1 text-xs text-slate-500 hover:bg-slate-100 rounded-md px-2.5 py-1.5 transition-colors">
+              class="flex items-center gap-1 text-xs text-slate-500 hover:bg-white rounded-md px-2.5 py-1.5 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 class="lucide lucide-languages text-slate-400" aria-hidden="true">
@@ -99,7 +100,7 @@
               </svg>
             </button>
           </div>
-          <button class="flex items-center gap-2 hover:bg-slate-100 rounded-lg px-2 py-1.5 transition-colors ml-1">
+          <button class="flex items-center gap-2 hover:bg-white rounded-lg px-2 py-1.5 transition-colors ml-1">
             <div
               class="w-7 h-7 rounded-full bg-gradient-to-br from-ast-blue to-ast-dark-blue flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 ring-2 ring-slate-200 shadow-sm">
               SM</div>
@@ -116,24 +117,24 @@
         </div>
       </header>
 
-      <div id="edit-mode" class="max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 pt-2 pb-6">
+      <div id="edit-mode" class="max-w-[1480px] mx-auto w-full px-4 sm:px-6 lg:px-8 pt-2 pb-8">
 
         <!-- Greeting Card (from user code) -->
         <div
-          class="bg-white rounded-2xl shadow-sm border border-slate-200/60 px-6 py-4 mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 sm:gap-7">
+          class="rounded-[28px] border border-blue-100/90 bg-gradient-to-br from-white/95 via-blue-50/70 to-white/95 px-6 py-5 mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 sm:gap-7 shadow-[0_18px_40px_rgba(37,99,235,0.08)]">
           <div>
-            <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">Wednesday, Jul 1, 2026
+            <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.22em] mb-1">Wednesday, Jul 1, 2026
             </p>
             <h1 class="text-2xl sm:text-3xl font-extrabold text-ast-navy leading-[1.1] tracking-tight">Good
               Evening, <span class="text-ast-blue">Dr. Sarah</span></h1>
-            <p class="text-xs text-slate-500 mt-1">Ready to parse a transcript?</p>
+            <p class="text-sm text-slate-500 mt-2">Ready to parse a transcript and surface clean billing signals?</p>
           </div>
 
           <div id="session-top-meta" class="flex flex-col gap-2 items-start sm:items-end">
             <div class="flex items-center gap-2">
               <h1 class="text-xl font-bold text-ast-navy" id="session-title">Live Therapy Session</h1>
               <span
-                class="text-[10px] font-bold bg-ast-tint text-ast-blue border border-ast-blue/10 rounded-full px-2.5 py-1 uppercase tracking-wide"
+                class="text-[10px] font-bold bg-ast-tint text-ast-blue border border-blue-200 rounded-full px-3 py-1 uppercase tracking-[0.16em] shadow-sm"
                 id="status-pill">Live Session</span>
             </div>
             <div class="text-xs font-medium text-slate-500 flex flex-wrap gap-3" id="meta-row"></div>
@@ -145,10 +146,10 @@
           <div id="run-status" class="run-status" role="status" aria-live="polite"></div>
         </div>
 
-        <div class="flex flex-col md:flex-row gap-8 items-start">
+        <div class="flex flex-col gap-6 lg:grid lg:grid-cols-[430px_minmax(0,1fr)] lg:items-start">
           <!-- Left Content Area -->
-          <div class="flex-1 w-full relative">
-            <div id="content" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-5 min-h-[500px]">
+          <div class="order-2 w-full relative lg:order-2">
+            <div id="content" class="bg-white/90 rounded-[32px] shadow-sm border border-blue-100/80 p-6 min-h-[560px]">
               <div class="loading text-sm text-slate-500 flex items-center justify-center gap-2 h-full py-20">
                 <svg class="animate-spin h-5 w-5 text-ast-blue" xmlns="http://www.w3.org/2000/svg" fill="none"
                   viewBox="0 0 24 24">
@@ -163,9 +164,12 @@
           </div>
 
           <!-- Right Input Area -->
-          <div class="w-full md:w-[480px] flex-shrink-0 sticky top-24">
-            <div id="transcript-section" class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-5">
-              <h2 class="text-base font-bold text-ast-navy mb-1 flex items-center gap-2">
+          <div class="order-1 w-full lg:w-auto flex-shrink-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)]">
+            <div id="transcript-section" class="bg-white/90 rounded-[32px] shadow-sm border border-blue-100/80 p-5 sm:p-6 lg:overflow-hidden lg:flex lg:max-h-[calc(100vh-7rem)] lg:flex-col">
+              <div class="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 mb-1">Live Intake</p>
+                  <h2 class="text-lg font-extrabold text-ast-navy flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                   class="lucide lucide-mic text-ast-blue">
@@ -174,42 +178,64 @@
                   <rect x="9" y="2" width="6" height="13" rx="3"></rect>
                 </svg>
                 Transcript Feed
-              </h2>
-              <p class="text-[11px] text-slate-400 mb-4 leading-relaxed">Paste your transcript, parse it, and feed
-                sentences one by one to auto-detect codes.</p>
+                  </h2>
+                  <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">Paste your transcript, parse it, and feed
+                5 sentences at a time. AI enrichment runs after every 20 sentences fed.</p>
+                </div>
+                <div class="hidden sm:flex items-center gap-2 rounded-full border border-blue-100 bg-white/90 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600 shadow-sm">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  Session Ready
+                </div>
+              </div>
+
+              <div class="transcript-section-body lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+              <div class="mb-4 grid grid-cols-3 gap-2">
+                <div class="rounded-2xl bg-white/90 border border-blue-100 px-3 py-3 shadow-sm">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Stage</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">Detection</p>
+                </div>
+                <div class="rounded-2xl bg-white/90 border border-blue-100 px-3 py-3 shadow-sm">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">AI Feed</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">5 Sentences</p>
+                </div>
+                <div class="rounded-2xl bg-white/90 border border-blue-100 px-3 py-3 shadow-sm">
+                  <p class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Output</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">Detected CPT</p>
+                </div>
+              </div>
 
               <div class="flex gap-2 mb-3">
                 <input type="text" id="live-patient-name" placeholder="Patient Name (e.g., John Doe)"
-                  class="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50" />
+                  class="flex-1 px-3 py-2.5 rounded-xl border border-blue-100 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-white/90 shadow-sm" />
                 <input type="text" id="live-patient-id" placeholder="ID (12345)"
-                  class="w-24 px-3 py-2 rounded-lg border border-slate-200 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50" />
+                  class="w-24 px-3 py-2.5 rounded-xl border border-blue-100 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-white/90 shadow-sm" />
               </div>
 
               <textarea id="live-transcript" rows="3"
-                class="w-full rounded-lg border border-slate-200 p-3 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50 mb-3 resize-none"
+                class="w-full rounded-2xl border border-blue-100 p-3.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-white/90 mb-3 resize-none shadow-sm"
                 placeholder="Therapist: Let's do some therapeutic exercises today."></textarea>
 
               <div class="flex gap-2 mb-4">
                 <select id="transcript-billing-rule"
-                  class="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-slate-50/50">
+                  class="flex-1 px-3 py-2.5 rounded-xl border border-blue-100 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 focus:border-ast-blue/40 bg-white/90 shadow-sm">
                   <option value="cms_8_minute">Medicare 8-Minute</option>
                   <option value="ama_rule_of_8">AMA Rule of 8</option>
                 </select>
                 <button type="button" id="btn-parse-sentences"
-                  class="bg-ast-navy hover:bg-[#141743] text-white rounded-lg text-xs font-bold px-4 transition-colors shadow-sm whitespace-nowrap">Parse
+                  class="bg-ast-navy hover:bg-[#141743] text-white rounded-xl text-xs font-bold px-4 transition-colors shadow-md whitespace-nowrap">Parse
                   Sentences</button>
               </div>
 
               <div id="sentence-feed-container" style="display: none;"
-                class="mb-4 border border-slate-200 p-4 rounded-xl bg-slate-50/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-                <h3 id="next-sentence-title" class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                class="mb-4 border border-blue-100 p-4 rounded-2xl bg-blue-50/60 shadow-[0_8px_18px_rgba(148,163,184,0.10)]">
+                <h3 id="next-sentence-title" class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.16em] mb-2">
                   Next Sentence:</h3>
                 <p id="next-sentence-display"
-                  class="bg-white p-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed mb-3 shadow-[0_1px_2px_rgba(0,0,0,0.02)] min-h-[40px]">
+                  class="bg-white/95 p-3 rounded-xl border border-blue-100 text-xs font-medium text-slate-700 leading-relaxed mb-3 shadow-sm min-h-[40px]">
                 </p>
-                <div class="flex items-center justify-between">
+                <div class="sentence-feed-actions flex items-center justify-between gap-3">
                   <button type="button" id="btn-feed-sentence"
-                    class="bg-ast-blue hover:bg-ast-dark-blue text-white rounded-lg text-xs font-bold py-2 px-4 transition-colors shadow-sm shadow-ast-blue/20 flex items-center gap-1.5">
+                    class="bg-ast-blue hover:bg-ast-dark-blue text-white rounded-xl text-xs font-bold py-2 px-4 transition-colors shadow-md shadow-ast-blue/20 flex items-center gap-1.5">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
                       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                       class="lucide lucide-play">
@@ -218,12 +244,13 @@
                     Feed
                   </button>
                   <span id="sentences-remaining"
-                    class="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-200"></span>
+                    class="text-xs font-bold text-slate-500 bg-white/95 px-2.5 py-1 rounded-lg border border-blue-100 shadow-sm"></span>
                 </div>
               </div>
 
               <div id="fed-sentences"
-                class="max-h-[300px] overflow-y-auto empty:hidden bg-slate-50/50 rounded-lg p-2 text-xs border border-slate-100">
+                class="max-h-[300px] overflow-y-auto empty:hidden bg-white/70 rounded-2xl p-2 text-xs border border-blue-50">
+              </div>
               </div>
             </div>
           </div>
@@ -315,21 +342,21 @@
           <aside id="llm-unit-calculator-panel"
             class="w-full xl:w-[420px] flex-shrink-0 xl:sticky xl:top-24"
             aria-label="LLM Unit Calculator">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-5">
+            <div class="bg-white/90 rounded-[28px] shadow-sm border border-blue-100/80 p-5">
               <div class="mb-3 flex items-start justify-between gap-2">
                 <div>
-                  <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Standalone Utility</p>
+                  <p class="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">Standalone Utility</p>
                   <h3 class="text-base font-extrabold text-ast-navy">LLM Unit Calculator</h3>
-                  <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">Enter CPT codes and durations to calculate billable units via Gemini.</p>
+                  <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">Enter CPT codes and durations to calculate billable units via OpenAI.</p>
                 </div>
                 <button type="button" id="btn-llm-reset"
-                  class="flex-shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+                  class="flex-shrink-0 rounded-xl border border-blue-100 bg-white px-2.5 py-1.5 text-[10px] font-bold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 shadow-sm"
                   title="Reset calculator">
                   Reset
                 </button>
               </div>
-              <div id="llm-rule-selector" class="mb-3 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2.5">
-                <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Timing Rule</p>
+              <div id="llm-rule-selector" class="mb-3 rounded-2xl border border-blue-100 bg-blue-50/50 px-3 py-3">
+                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 mb-2">Timing Rule</p>
                 <div class="flex flex-col gap-2 text-xs font-medium text-slate-700">
                   <label class="inline-flex cursor-pointer items-center gap-2">
                     <input type="radio" name="llm-billing-rule" value="cms_8_minute" checked
@@ -345,11 +372,11 @@
               </div>
               <div id="llm-editable-rows" class="space-y-2 mb-3"></div>
               <button type="button" id="btn-llm-add-row"
-                class="mb-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50">
+                class="mb-3 w-full rounded-xl border border-blue-100 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 shadow-sm">
                 + Add CPT Row
               </button>
               <button type="button" id="btn-llm-calculate"
-                class="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-ast-blue/30 bg-ast-tint px-4 py-2.5 text-xs font-bold text-ast-blue transition-colors hover:bg-ast-blue/10 disabled:cursor-not-allowed disabled:opacity-60">
+                class="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-ast-blue/30 bg-ast-tint px-4 py-3 text-xs font-bold text-ast-blue transition-colors hover:bg-ast-blue/10 disabled:cursor-not-allowed disabled:opacity-60 shadow-sm">
                 <span id="btn-llm-calculate-label">Calculate Units</span>
               </button>
               <div id="llm-panel-results" class="mt-3 space-y-3" aria-live="polite"></div>

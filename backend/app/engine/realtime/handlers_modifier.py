@@ -1,29 +1,12 @@
 
 from app.engine.loader import MetadataStore
-from app.models.live import LiveSessionResponse, LiveClientInfo
-from app.engine.realtime.store import get_session, save_session, create_session
+from app.models.live import LiveSessionResponse
+from app.engine.realtime.store import get_session, save_session
 from app.engine.realtime.helpers import (
-    _append_icd, _parse_icd_input, _reactivate_session, _apply_icd_validation,
-    _revalidate_all_cpts_icd, _sync_row_messages, _next_sequence, _find_row,
-    _open_cpt_row, _live_response, _apply_conflict_pending,
-    _refresh_completed_rule_messages, _recalculate_units, _refresh_conflicts
+    _find_row, _live_response,
+    _pending_and_recalculate_billing,
+    _refresh_and_recalculate_billing_and_save,
 )
-from app.models.live import LiveCptRow
-from app.engine.realtime.rules import (
-    active_cpt_codes,
-    conflict_codes,
-    icd_pending_for_cpt,
-    incremental_conflicts,
-    unresolved_bypassable,
-    _issue_removal_reason,
-)
-from app.engine.mue import apply_mue_cap
-from app.engine.eight_minute import calculate_units as calculate_units_cms
-from app.engine import ama_rule
-from app.engine.icd10 import icd_code_variants
-
-
-from app.engine.transcript_medexa import validate_cpt_transcript_support, validate_icd10_transcript_support
 
 def on_modifier_action(
     session_id: str,
@@ -52,9 +35,7 @@ def on_modifier_action(
         else:
             msg = f"AI suggestion {cpt_target} not found."
         
-        _refresh_conflicts(state, store)
-        _recalculate_units(state, store)
-        save_session(state)
+        _refresh_and_recalculate_billing_and_save(state, store)
         return _live_response(state, store, msg)
         
     if conflict_id.startswith("ai_reject_"):
@@ -67,9 +48,7 @@ def on_modifier_action(
             target.duration_minutes_exact = 0
             target.minutes_billed = 0
             target.message = f"Rejected — AI detected weak transcript support."
-        _refresh_conflicts(state, store)
-        _recalculate_units(state, store)
-        save_session(state)
+        _refresh_and_recalculate_billing_and_save(state, store)
         return _live_response(state, store, f"CPT {cpt_to_remove} removed due to weak transcript support.")
 
     conflict = next((c for c in state.conflicts if c.conflict_id == conflict_id), None)
@@ -87,8 +66,7 @@ def on_modifier_action(
                 if modifier and modifier not in row.applied_modifiers:
                     if row.cpt_code == conflict.column_two_code or row.cpt_code == getattr(conflict, "modifier_applies_to", None):
                         row.applied_modifiers.append(modifier)
-        _apply_conflict_pending(state)
-        _recalculate_units(state, store)
+        _pending_and_recalculate_billing(state, store)
         msg = f"Modifier approved for {conflict_id}."
     else:
         newer = max(conflict.codes, key=lambda c: next(
@@ -100,9 +78,8 @@ def on_modifier_action(
             target.billing_status = "removed"
             target.units = 0
             target.message = f"Rejected — removed due to conflict {conflict_id}."
-        _refresh_conflicts(state, store)
-        _recalculate_units(state, store)
-        msg = f"Conflict {conflict_id} rejected — {newer} removed."
+        _refresh_and_recalculate_billing_and_save(state, store)
+        return _live_response(state, store, f"Conflict {conflict_id} rejected — {newer} removed.")
 
     save_session(state)
     return _live_response(state, store, msg)

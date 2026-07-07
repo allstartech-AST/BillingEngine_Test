@@ -7,7 +7,7 @@ from app.engine.llm_audit import (
     build_summary_engine_snapshot,
     run_compliance_audit,
 )
-from app.engine.gemini_errors import GeminiAuditError
+from app.engine.llm_errors import LlmAuditError
 from app.engine.loader import load_metadata
 from app.engine.realtime.finalize_display import build_finalize_display
 from app.engine.realtime.store import get_session
@@ -108,14 +108,14 @@ async def live_session_llm_audit(
 
     try:
         llm = await run_compliance_audit(billing_summary, billing_rule)
-    except GeminiAuditError as exc:
+    except LlmAuditError as exc:
         raise HTTPException(status_code=exc.info.http_status, detail=exc.info.as_detail()) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=502,
             detail={
-                "category": "gemini_api_error",
-                "message": "Gemini audit failed due to an unexpected server error.",
+                "category": "llm_api_error",
+                "message": "OpenAI audit failed due to an unexpected server error.",
                 "technical_detail": str(exc),
             },
         ) from exc

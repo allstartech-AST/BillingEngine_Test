@@ -988,3 +988,517 @@ body {
 .finalized-view .scroll-body {
   max-height: none;
 }
+
+/* Lighter premium refresh for the primary transcript and CPT workflow */
+:root {
+  --bg: #eef4ff;
+  --bg-alt: #f8fbff;
+  --white: rgba(255, 255, 255, 0.9);
+  --border: #d7e4f7;
+  --border-strong: #bfd4f5;
+  --text: #122033;
+  --muted: #5f7188;
+  --blue: #2563eb;
+  --blue-strong: #1d4ed8;
+  --blue-light: #e9f2ff;
+  --blue-border: #bfdbfe;
+  --green: #15803d;
+  --green-bg: #dcfce7;
+  --black: #111827;
+  --shadow-soft: 0 18px 40px rgba(37, 99, 235, 0.08);
+  --shadow-card: 0 14px 32px rgba(15, 23, 42, 0.08);
+  --color-purple-light: #eef2ff;
+  --color-purple: #6366f1;
+  --color-orange: #f59e0b;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 30%),
+    linear-gradient(180deg, #f7fbff 0%, #edf4ff 52%, #e9f1ff 100%);
+  color: var(--text);
+}
+
+#root > .min-h-screen {
+  background: transparent !important;
+}
+
+.app-header,
+header.h-16 {
+  background: rgba(255, 255, 255, 0.82) !important;
+  border-bottom: 1px solid rgba(191, 219, 254, 0.85) !important;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.08) !important;
+}
+
+#edit-mode,
+#review-mode {
+  padding-top: 18px !important;
+}
+
+#edit-mode > div:first-child,
+#review-mode > div:first-child {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(239, 246, 255, 0.94)) !important;
+  border: 1px solid rgba(191, 219, 254, 0.8) !important;
+  box-shadow: var(--shadow-soft) !important;
+}
+
+#content,
+#transcript-section,
+#review-content,
+#llm-unit-calculator-panel > div {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border: 1px solid rgba(191, 219, 254, 0.82) !important;
+  box-shadow: var(--shadow-card) !important;
+  backdrop-filter: blur(16px);
+}
+
+#content,
+#review-content {
+  position: relative;
+  overflow: hidden;
+}
+
+#content::before,
+#transcript-section::before,
+#review-content::before,
+#llm-unit-calculator-panel > div::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, #60a5fa, #2563eb, #38bdf8);
+  opacity: 0.8;
+}
+
+#transcript-section,
+#llm-unit-calculator-panel > div {
+  position: relative;
+}
+
+#transcript-section h2,
+#review-mode h2,
+#llm-unit-calculator-panel h3,
+#session-title,
+#patient-name {
+  color: #0f172a !important;
+}
+
+#transcript-section p,
+#review-mode p,
+#llm-unit-calculator-panel p,
+#meta-row,
+.card-meta,
+.summary-sub,
+.conflict-text,
+.suggestion-list,
+.loading {
+  color: var(--muted);
+}
+
+#live-patient-name,
+#live-patient-id,
+#live-transcript,
+#transcript-billing-rule,
+.custom-modifier-input,
+.region-input,
+.manual-unit-input,
+#json-paste {
+  background: rgba(248, 251, 255, 0.95) !important;
+  border: 1px solid rgba(191, 219, 254, 0.9) !important;
+  color: var(--text) !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+#live-patient-name:focus,
+#live-patient-id:focus,
+#live-transcript:focus,
+#transcript-billing-rule:focus,
+.custom-modifier-input:focus,
+.region-input:focus,
+.manual-unit-input:focus,
+#json-paste:focus {
+  outline: none !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18) !important;
+}
+
+#btn-parse-sentences,
+#btn-feed-sentence,
+#btn-finalize,
+.btn-primary,
+.btn-demo,
+.btn-sign {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  border: 1px solid rgba(37, 99, 235, 0.1) !important;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.2) !important;
+}
+
+#btn-parse-sentences:hover,
+#btn-feed-sentence:hover,
+#btn-finalize:hover,
+.btn-primary:hover,
+.btn-demo:hover,
+.btn-sign:hover {
+  filter: brightness(1.03);
+}
+
+#btn-llm-add-row,
+#btn-llm-reset,
+.btn-file,
+.btn-copy-table {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(191, 219, 254, 0.9) !important;
+  color: #1e3a8a !important;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.12);
+}
+
+#btn-llm-calculate {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(59, 130, 246, 0.15)) !important;
+  border: 1px solid rgba(96, 165, 250, 0.4) !important;
+  color: #1d4ed8 !important;
+}
+
+#sentence-feed-container,
+#llm-rule-selector,
+.summary-card,
+.stat-card,
+.billing-table-wrap,
+.input-section,
+.icd-card,
+.cpt-card,
+.removed-row {
+  background: rgba(249, 252, 255, 0.9) !important;
+  border: 1px solid rgba(191, 219, 254, 0.75) !important;
+  box-shadow: 0 10px 22px rgba(148, 163, 184, 0.1);
+}
+
+.cpt-card.review,
+.icd-card.review {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.95)) !important;
+  border-color: rgba(96, 165, 250, 0.55) !important;
+}
+
+#next-sentence-display,
+#fed-sentences,
+.billing-table th,
+.billing-table tr.total-row td {
+  background: rgba(255, 255, 255, 0.82) !important;
+}
+
+.billing-table th {
+  color: #5f7188 !important;
+  border-bottom: 1px solid rgba(191, 219, 254, 0.8) !important;
+}
+
+.billing-table td {
+  border-bottom: 1px solid rgba(215, 228, 247, 0.9) !important;
+}
+
+.status-pill,
+.unit-badge,
+.badge-primary,
+.pill-green {
+  border: 1px solid rgba(96, 165, 250, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.status-pill,
+.badge-primary,
+.unit-badge {
+  background: #eaf3ff !important;
+  color: #1d4ed8 !important;
+}
+
+.pill-green {
+  background: #ecfdf5 !important;
+  color: #15803d !important;
+}
+
+.modifier-pill {
+  background: #eef4ff;
+  border-color: #cfe0fb;
+}
+
+.run-status.info {
+  background: #edf5ff;
+  color: #1d4ed8;
+  border: 1px solid #c7dcff;
+}
+
+.run-status.success {
+  background: #ecfdf5;
+  color: #15803d;
+}
+
+.run-status.error,
+.error {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+  border-radius: 12px;
+}
+
+.card-title,
+.summary-value,
+.stat-value,
+.billing-summary-header h2,
+.review-heading h2,
+.input-heading,
+.section-heading h2 {
+  color: #0f172a;
+}
+
+.scroll-body::-webkit-scrollbar,
+#fed-sentences::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scroll-body::-webkit-scrollbar-thumb,
+#fed-sentences::-webkit-scrollbar-thumb {
+  background: #c9dbf7;
+  border-radius: 999px;
+}
+
+@media (max-width: 1024px) {
+  #edit-mode > .flex,
+  #review-layout {
+    gap: 20px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  #edit-mode > div:first-child,
+  #review-mode > div:first-child,
+  #content,
+  #transcript-section,
+  #review-content,
+  #llm-unit-calculator-panel > div {
+    border-radius: 20px !important;
+  }
+}
+
+/* Homescreen redesign with original-like light palette */
+#edit-mode,
+#review-mode {
+  position: relative;
+}
+
+header.h-16 {
+  background: var(--white) !important;
+  border-bottom: 1px solid var(--border) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+#edit-mode > div:first-child,
+#review-mode > div:first-child {
+  border-radius: 28px !important;
+  background: var(--white) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05) !important;
+}
+
+#content,
+#transcript-section,
+#review-content,
+#llm-unit-calculator-panel > div,
+.summary-card,
+.stat-card,
+.billing-table-wrap,
+.input-section,
+.icd-card,
+.cpt-card,
+.removed-row,
+#sentence-feed-container,
+#llm-rule-selector {
+  background: var(--white) !important;
+  border: 1px solid rgba(226, 232, 240, 0.92) !important;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04) !important;
+}
+
+#content,
+#transcript-section,
+#review-content,
+#llm-unit-calculator-panel > div {
+  position: relative;
+}
+
+#content {
+  min-height: 620px !important;
+}
+
+#content::before,
+#transcript-section::before,
+#review-content::before,
+#llm-unit-calculator-panel > div::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, #bfdbfe, #60a5fa 45%, #2563eb 100%) !important;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+#content::after,
+#transcript-section::after,
+#review-content::after,
+#llm-unit-calculator-panel > div::after {
+  content: none !important;
+}
+
+#live-patient-name,
+#live-patient-id,
+#live-transcript,
+#transcript-billing-rule,
+.custom-modifier-input,
+.region-input,
+.manual-unit-input,
+#json-paste,
+.llm-input-cpt,
+.llm-input-duration,
+.llm-input-region {
+  background: #ffffff !important;
+  border: 1px solid rgba(191, 219, 254, 0.9) !important;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+}
+
+#btn-parse-sentences,
+#btn-feed-sentence,
+#btn-finalize,
+.btn-primary,
+.btn-demo,
+.btn-sign,
+#btn-llm-calculate {
+  background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(37, 99, 235, 0.12) !important;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18) !important;
+}
+
+#btn-parse-sentences:hover,
+#btn-feed-sentence:hover,
+#btn-finalize:hover,
+.btn-primary:hover,
+.btn-demo:hover,
+.btn-sign:hover,
+#btn-llm-calculate:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+}
+
+#btn-llm-add-row,
+#btn-llm-reset,
+.btn-file,
+.btn-copy-table {
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  color: #334155 !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
+}
+
+.summary-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 20px !important;
+}
+
+.summary-card {
+  padding: 24px 24px 22px !important;
+  border-radius: 24px !important;
+}
+
+.summary-card h3,
+.section-heading h2,
+.billing-summary-header h2 {
+  letter-spacing: 0.04em;
+}
+
+.summary-value,
+.stat-value {
+  font-size: 36px !important;
+  color: #1e293b !important;
+  background: none !important;
+}
+
+.section-heading {
+  margin: 30px 0 14px !important;
+  padding: 0 4px;
+}
+
+.section-heading h2 {
+  font-size: 18px !important;
+}
+
+.cpt-card,
+.icd-card {
+  border-radius: 24px !important;
+  padding: 18px 20px !important;
+  margin-bottom: 14px !important;
+}
+
+.billing-table-wrap,
+#fed-sentences,
+#next-sentence-display {
+  border-radius: 20px !important;
+}
+
+.transcript-section-body {
+  min-height: 0;
+}
+
+#next-sentence-display {
+  max-height: 220px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+
+.sentence-feed-actions {
+  position: sticky;
+  bottom: 0;
+  padding-top: 10px;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0), rgba(239, 246, 255, 0.96) 28%);
+}
+
+.billing-table th {
+  background: #f8fafc !important;
+}
+
+.run-status {
+  border-radius: 18px !important;
+  padding: 14px 16px !important;
+}
+
+#fed-sentences > div {
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border-left-width: 4px !important;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04) !important;
+  margin-bottom: 10px !important;
+}
+
+#finalize-bar button {
+  padding-inline: 34px !important;
+  border-radius: 999px !important;
+}
+
+@media (min-width: 1024px) {
+  #transcript-section {
+    min-height: calc(100vh - 8rem);
+  }
+
+  .transcript-section-body {
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  #content,
+  #review-content {
+    padding: 28px !important;
+  }
+}
+
+@media (max-width: 1023px) {
+  .summary-row {
+    grid-template-columns: 1fr !important;
+  }
+}

@@ -14,10 +14,14 @@ function apiUrl(path) {
 
 function setStatus(message, type) {
   const elements = document.querySelectorAll('.run-status');
+  const showMessage = type === "error";
   elements.forEach(el => {
-    el.textContent = message;
-    el.className = "run-status" + (type ? " " + type : "");
+    el.textContent = showMessage ? message : "";
+    el.className = "run-status" + (showMessage && type ? " " + type : "");
   });
+  if (!showMessage) {
+    return;
+  }
   const visibleStatus = Array.from(elements).find(el => el.offsetParent !== null);
   if (visibleStatus) {
     visibleStatus.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -142,15 +146,15 @@ function renderCptCard(card) {
       if (s.type === "transcript_weak") {
           return `<li style="display: flex; flex-direction: column; gap: 4px;">
               <span>${escapeHtml(s.summary)}</span>
-              <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="align-self: flex-start; margin-top: 4px; padding: 4px 8px; font-size: 12px; background: #fee2e2; color: #dc2626; border-radius: 4px; font-weight: 500;">✕ Accept AI Suggestion & Remove</button>
+              <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="align-self: flex-start; margin-top: 4px; padding: 4px 8px; font-size: 12px; background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">✕ Accept AI Suggestion & Remove</button>
           </li>`;
       }
       if (s.type === "ai_suggested") {
           return `<li style="display: flex; flex-direction: column; gap: 8px;">
               <span>${escapeHtml(s.summary)}</span>
               <div style="display: flex; gap: 8px;">
-                  <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: #fee2e2; color: #dc2626; border-radius: 4px; font-weight: 500;">✕ Reject</button>
-                  <button class="btn-text approve" data-action="approve" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: #dcfce7; color: #16a34a; border-radius: 4px; font-weight: 500;">✓ Approve</button>
+                  <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">✕ Reject</button>
+                  <button class="btn-text approve" data-action="approve" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: rgba(255,255,255,0.72); color: #1e293b; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">✓ Approve</button>
               </div>
           </li>`;
       }
@@ -182,7 +186,7 @@ function renderCptCard(card) {
       startTooltip = 'title="Timer already recorded"';
     }
   } else {
-    startDisabled = 'style="background: #16a34a; color: white; padding: 4px 10px; border-radius: 6px;"';
+    startDisabled = 'style="background: rgba(255,255,255,0.72); color: #1e293b; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 8px; box-shadow: 0 6px 14px rgba(51,65,85,0.08);"';
   }
 
   return `
@@ -192,10 +196,10 @@ function renderCptCard(card) {
             ${(card.duration_display === "—") ? `
             <div class="timer-actions" style="display: flex; align-items: center; gap: 8px;">
               <span class="timer-countdown" style="font-size: 12px; color: var(--muted); display: none;"></span>
-              <span class="timer-display" style="font-family: monospace; font-size: 16px; font-weight: 700; color: #2563eb; display: none;">00:00</span>
+              <span class="timer-display" style="font-family: monospace; font-size: 16px; font-weight: 700; color: #334155; display: none;">00:00</span>
               <button class="btn-demo" data-action="start-timer" ${startDisabled} ${startTooltip}>Start</button>
-              <button class="btn-demo" data-action="pause-timer" style="background: #f59e0b; color: white; padding: 4px 10px; border-radius: 6px; display: none; cursor: pointer;">Pause</button>
-              <button class="btn-demo" data-action="stop-timer" style="background: #dc2626; color: white; padding: 4px 10px; border-radius: 6px; display: none; cursor: pointer;">Stop</button>
+              <button class="btn-demo" data-action="pause-timer" style="background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 8px; display: none; cursor: pointer; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">Pause</button>
+              <button class="btn-demo" data-action="stop-timer" style="background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 8px; display: none; cursor: pointer; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">Stop</button>
             </div>` : `<span class="edit-icon">✎</span>`}
           </div>
           <div class="card-meta">${unitsHtml} &nbsp;&nbsp; Duration: <strong><span id="duration-display-${escapeHtml(card.cpt_code)}">${escapeHtml(card.duration_display)}</span></strong></div>
@@ -219,10 +223,10 @@ function renderUi(ui, onModifierAction) {
   document.getElementById("session-title").textContent = h.session_title;
   document.getElementById("status-pill").textContent = h.status_label;
   document.getElementById("meta-row").innerHTML = `
-        <span>📅 ${escapeHtml(h.session_datetime)}</span>
-        <span>Patient ID: #${escapeHtml(h.patient_id.replace(/^#/, ""))}</span>
-        <span>Duration: ${escapeHtml(h.duration_display)}</span>
-        <span id="header-units-display">Unit(s): ${h.units_total}</span>`;
+        <span class="inline-flex items-center rounded-full border border-white/70 bg-white/65 px-3 py-1 shadow-sm">Date: ${escapeHtml(h.session_datetime)}</span>
+        <span class="inline-flex items-center rounded-full border border-white/70 bg-white/65 px-3 py-1 shadow-sm">Patient ID: #${escapeHtml(h.patient_id.replace(/^#/, ""))}</span>
+        <span class="inline-flex items-center rounded-full border border-white/70 bg-white/65 px-3 py-1 shadow-sm">Duration: ${escapeHtml(h.duration_display)}</span>
+        <span id="header-units-display" class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50/80 px-3 py-1 font-semibold text-blue-700 shadow-sm">Unit(s): ${h.units_total}</span>`;
 
   let ruleLabel = "";
   let ruleTooltip = "";
@@ -500,7 +504,7 @@ function renderFinalizedBilling(finalize, ui) {
               <div>
                 <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Duration → Units Check</p>
                 <h2 class="text-lg font-extrabold text-ast-navy">Summary Unit Validation</h2>
-                <p class="mt-1 text-xs text-slate-500">Verifies assigned units match durations documented in this billing summary.</p>
+                <p class="mt-1 text-xs text-slate-500">Run an independent LLM audit to compare expected units against the generated summary.</p>
               </div>
               <div id="summary-validation-overall"></div>
             </div>
@@ -712,6 +716,7 @@ async function ensureLiveSession() {
 
 let parsedSentences = [];
 let currentSentenceIndex = 0;
+const SENTENCES_PER_FEED_BATCH = 5;
 
 document.getElementById("btn-parse-sentences").addEventListener("click", () => {
   const text = document.getElementById("live-transcript").value;
@@ -751,7 +756,7 @@ document.getElementById("btn-parse-sentences").addEventListener("click", () => {
 function updateSentenceDisplay() {
   const titleEl = document.getElementById("next-sentence-title");
   if (currentSentenceIndex < parsedSentences.length) {
-    let batchSize = Math.min(4, parsedSentences.length - currentSentenceIndex);
+    let batchSize = Math.min(SENTENCES_PER_FEED_BATCH, parsedSentences.length - currentSentenceIndex);
     let upcoming = [];
     for (let i = 0; i < batchSize; i++) {
       upcoming.push(parsedSentences[currentSentenceIndex + i]);
@@ -797,7 +802,7 @@ document.getElementById("btn-feed-sentence").addEventListener("click", async (e)
   btn.disabled = true;
 
   let batch = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < SENTENCES_PER_FEED_BATCH; i++) {
     if (currentSentenceIndex + i < parsedSentences.length) {
       const sentence = parsedSentences[currentSentenceIndex + i];
       batch.push(sentence);
@@ -808,7 +813,10 @@ document.getElementById("btn-feed-sentence").addEventListener("click", async (e)
   await ensureLiveSession();
   try {
     const combined = batch.join(" ");
-    handleLiveResponse(await liveApi("/live/session/" + liveSessionId + "/transcript/sentence", "POST", { sentence: combined }));
+    handleLiveResponse(await liveApi("/live/session/" + liveSessionId + "/transcript/sentence", "POST", {
+      sentence: combined,
+      sentence_count: batch.length,
+    }));
     currentSentenceIndex += batch.length;
   } catch (err) { setStatus(err.message, "error"); }
   finally {

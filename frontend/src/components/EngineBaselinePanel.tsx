@@ -13,8 +13,8 @@ export default function EngineBaselinePanel({
 }: EngineBaselinePanelProps) {
   if (loading) {
     return (
-      <div className="flex h-full min-h-[280px] items-center justify-center rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+      <div className="flex h-full min-h-[280px] items-center justify-center rounded-2xl border border-white/5 bg-slate-950/80 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.85)]">
+        <div className="flex items-center gap-2 text-sm text-slate-300">
           <Spinner />
           Running local billing engine...
         </div>
@@ -24,16 +24,16 @@ export default function EngineBaselinePanel({
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700 shadow-sm">
+      <div className="rounded-2xl border border-red-500/50 bg-red-950/50 p-6 text-sm text-red-100 shadow-[0_18px_40px_rgba(127,29,29,0.6)]">
         <p className="font-semibold">Engine evaluation failed</p>
-        <p className="mt-1">{error}</p>
+        <p className="mt-1 text-red-200">{error}</p>
       </div>
     );
   }
 
   if (!result) {
     return (
-      <div className="flex h-full min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+      <div className="flex h-full min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/80 p-6 text-sm text-slate-400 shadow-[0_18px_40px_rgba(15,23,42,0.85)]">
         Local engine baseline will appear here after verification.
       </div>
     );
@@ -45,63 +45,65 @@ export default function EngineBaselinePanel({
       : "Medicare 8-Minute Rule";
 
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-white/5 bg-slate-950/80 p-5 shadow-[0_18px_40px_rgba(15,23,42,0.85)]">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
             Local Billing Engine
           </p>
-          <h3 className="text-lg font-extrabold text-ast-navy">Baseline Calculation</h3>
+          <h3 className="text-lg font-extrabold text-slate-50">Baseline Calculation</h3>
         </div>
-        <span className="rounded-full border border-ast-blue/10 bg-ast-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-ast-blue">
+        <span className="rounded-full border border-ast-blue/30 bg-ast-tint/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-100">
           {ruleLabel}
         </span>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Total Units
           </p>
-          <p className="text-2xl font-extrabold text-ast-navy">{result.totalUnits}</p>
+          <p className="text-2xl font-extrabold text-slate-50">{result.totalUnits}</p>
         </div>
-        <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
             Modifier Signal
           </p>
-          <p className="text-lg font-bold text-ast-navy">
+          <p className="text-lg font-semibold text-slate-50">
             {result.modifierSuggested ?? result.codes.find((c) => c.modifiers.length)?.modifiers.join(", ") ?? "None"}
           </p>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200/80">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50/90">
+      <div className="overflow-hidden rounded-xl border border-slate-800/80 bg-slate-950/70">
+        <table className="min-w-full divide-y divide-slate-800 text-sm">
+          <thead className="bg-slate-950/90">
             <tr>
-              <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Code
               </th>
-              <th className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Description
               </th>
-              <th className="px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Units
               </th>
-              <th className="px-3 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Duration
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-800">
             {result.codes.map((code) => (
               <tr key={code.cpt}>
-                <td className="px-3 py-2.5 font-mono font-semibold text-ast-navy">
+                <td className="px-3 py-2.5 font-mono font-semibold text-slate-50">
                   {code.cpt}
                 </td>
-                <td className="px-3 py-2.5 text-slate-600">{code.description}</td>
-                <td className="px-3 py-2.5 text-center font-semibold">{code.units}</td>
-                <td className="px-3 py-2.5 text-center text-slate-600">
+                <td className="px-3 py-2.5 text-ast-text-muted">{code.description}</td>
+                <td className="px-3 py-2.5 text-center font-semibold text-slate-50">
+                  {code.units}
+                </td>
+                <td className="px-3 py-2.5 text-center text-ast-text-muted">
                   {Math.round(code.durationMinutes)} min
                 </td>
               </tr>

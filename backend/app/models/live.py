@@ -61,6 +61,9 @@ class LiveSessionState(BaseModel):
     whole_transcript: str = ""
     billing_rule: Literal["cms_8_minute", "ama_rule_of_8"] = "cms_8_minute"
     last_cpt_suggestion_length: int = 0
+    sentences_fed_count: int = 0
+    llm_context_ready: bool = False
+    llm_turns: list[dict[str, str]] = Field(default_factory=list)
 
 
 class LiveSessionCreateRequest(BaseModel):
@@ -94,6 +97,7 @@ class LiveCptDurationRequest(BaseModel):
 
 class LiveTranscriptSentenceRequest(BaseModel):
     sentence: str
+    sentence_count: int = Field(default=1, ge=1)
 
 
 class FinalizeCptLine(BaseModel):
