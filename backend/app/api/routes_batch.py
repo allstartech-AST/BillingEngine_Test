@@ -48,7 +48,17 @@ async def billing_validate_summary_units(body: SummaryValidateRequest) -> Summar
 @router.post("/llm-calculate-units", response_model=UnitCalcResponse)
 async def billing_llm_calculate_units(body: UnitCalcRequest) -> UnitCalcResponse:
     try:
-        codes = [{"cpt": c.cpt.strip(), "minutes": c.minutes} for c in body.codes if c.cpt.strip()]
+        codes = [
+            {
+                "cpt": c.cpt.strip(),
+                "minutes": c.minutes,
+                "region": c.region,
+                "occurrence_count": c.occurrence_count,
+                "area_sq_cm": c.area_sq_cm,
+            }
+            for c in body.codes
+            if c.cpt.strip()
+        ]
         return await run_unit_calculation(codes, body.billing_rule)
     except LlmAuditError as exc:
         raise HTTPException(status_code=exc.info.http_status, detail=exc.info.as_detail()) from exc

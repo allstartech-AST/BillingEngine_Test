@@ -88,6 +88,8 @@ LLM_GROQ_MIN_INTERVAL_SECONDS = _env_float("LLM_GROQ_MIN_INTERVAL_SECONDS", 25.0
 DATA_DIR = PROJECT_ROOT / "data"
 BILLING_DIR = DATA_DIR / "billing"
 MEDEXA_DIR = DATA_DIR / "medexa"
+LOGS_DIR = DATA_DIR / "logs"
+DETECTION_EVIDENCE_LOG = LOGS_DIR / "detection_evidence.json"
 
 BILLING_FILES = {
     "general": BILLING_DIR / "cpt_general_info.json",

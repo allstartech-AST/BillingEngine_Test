@@ -627,9 +627,6 @@ function showEditMode() {
 function showReviewMode() {
   document.getElementById("edit-mode").hidden = true;
   document.getElementById("review-mode").hidden = false;
-  if (window.LlmUnitCalculator) {
-    LlmUnitCalculator.onReviewShown();
-  }
 }
 
 function updateReviewPatientHeader(finalize, ui) {
@@ -782,6 +779,10 @@ function renderFinalizedBilling(finalize, ui) {
 
   if (window.SummaryValidation) {
     SummaryValidation.validateFromReview(finalize, ui);
+  }
+
+  if (window.LlmUnitCalculator) {
+    LlmUnitCalculator.onReviewShown(finalize, ui);
   }
 
   const manualInputs = reviewContent.querySelectorAll(".manual-unit-input");

@@ -1,4 +1,4 @@
-"""Standalone OpenAI unit calculator from manually entered CPT codes and durations."""
+"""LLM unit calculator from manually entered CPT codes and durations."""
 
 from __future__ import annotations
 
@@ -17,8 +17,10 @@ load_env_files()
 
 class UnitCalcCode(BaseModel):
     cpt: str
-    minutes: float = Field(gt=0)
+    minutes: float = Field(ge=0, default=0)
     region: str = ""
+    occurrence_count: int = Field(default=1, ge=1)
+    area_sq_cm: float | None = Field(default=None, ge=0)
 
 
 class UnitCalcRequest(BaseModel):
@@ -31,6 +33,7 @@ class UnitCalcCodeResult(BaseModel):
     minutes: float
     units: int
     explanation: str
+    billing_rule: str | None = None
 
 
 class UnitCalcResponse(BaseModel):
@@ -41,6 +44,42 @@ class UnitCalcResponse(BaseModel):
     notes: str
 
 
+def _normalize_cpt(value: str) -> str:
+    return str(value).strip()
+
+
+def _map_llm_code_rows(
+    parsed: dict[str, Any],
+    codes: list[dict[str, Any]],
+    store,
+) -> list[UnitCalcCodeResult]:
+    llm_rows = parsed.get("codes") or []
+    llm_by_cpt = {_normalize_cpt(row.get("cpt", "")): row for row in llm_rows if row.get("cpt")}
+
+    if set(llm_by_cpt.keys()) != {_normalize_cpt(c["cpt"]) for c in codes}:
+        if len(llm_rows) == len(codes):
+            llm_by_cpt = {
+                _normalize_cpt(codes[index]["cpt"]): llm_rows[index]
+                for index in range(len(codes))
+            }
+
+    results: list[UnitCalcCodeResult] = []
+    for row in codes:
+        cpt = _normalize_cpt(row["cpt"])
+        gem = llm_by_cpt.get(cpt, {})
+        minutes = float(row.get("minutes", 0) or 0)
+        results.append(
+            UnitCalcCodeResult(
+                cpt=cpt,
+                minutes=float(gem.get("minutes", minutes)),
+                units=int(round(float(gem.get("units", 0)))),
+                explanation=str(gem.get("explanation", "")).strip(),
+                billing_rule=store.billing_rule(cpt) if store.knows_cpt(cpt) else None,
+            )
+        )
+    return results
+
+
 async def run_unit_calculation(
     codes: list[dict[str, Any]],
     billing_rule: str,
@@ -49,33 +88,26 @@ async def run_unit_calculation(
         raise LlmAuditError(
             LlmErrorInfo(
                 category="llm_api_error",
-                message="Add at least one CPT code with a duration greater than 0.",
+                message="Add at least one CPT code.",
                 http_status=400,
                 technical_detail="codes list is empty",
             )
         )
 
     store = load_metadata()
+    raw_lines = unit_calc_raw_lines(codes)
     parsed = await run_llm_billing_calculation(
-        unit_calc_raw_lines(codes),
+        raw_lines,
         billing_rule,
         mode="calculate",
         store=store,
     )
 
-    code_results = [
-        UnitCalcCodeResult(
-            cpt=str(item["cpt"]),
-            minutes=float(item.get("minutes", 0)),
-            units=int(item.get("units", 0)),
-            explanation=str(item.get("explanation", "")),
-        )
-        for item in parsed.get("codes", [])
-    ]
-    total_units = int(parsed.get("total_units", sum(c.units for c in code_results)))
+    code_results = _map_llm_code_rows(parsed, codes, store)
+    total_units = int(parsed.get("total_units", sum(item.units for item in code_results)))
 
     return UnitCalcResponse(
-        rule_applied=str(parsed.get("rule_applied", "Medicare 8-Minute")),
+        rule_applied=str(parsed.get("rule_applied", ruleset_label(billing_rule))),
         rule_label=ruleset_label(billing_rule),
         total_units=total_units,
         codes=code_results,

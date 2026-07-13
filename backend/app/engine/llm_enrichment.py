@@ -12,6 +12,7 @@ from app.config import (
     load_env_files,
     openai_api_key,
 )
+from app.engine.evidence_logger import log_cpt_detection_evidence
 from app.engine.llm_cpt_tasks import (
     filter_suggestable_cpts,
     suggest_missing_cpts_async,
@@ -259,6 +260,12 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                                         _sync_row_messages(row)
                                         state.cpts.append(row)
                                         existing_cpts.append(code)
+                                        log_cpt_detection_evidence(
+                                            session_id,
+                                            code,
+                                            exact_quote=item.get("exact_quote", ""),
+                                            reasoning=item.get("reasoning", ""),
+                                        )
                         except Exception:
                             pass
                         current_pointer = seg_end

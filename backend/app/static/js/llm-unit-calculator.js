@@ -39,14 +39,43 @@
     return selected ? selected.value : billingRule;
   }
 
+  function parseDurationDisplay(display) {
+    if (!display || display === "—" || display === "flat" || display === "Manual") {
+      return 0;
+    }
+    var text = String(display).trim().toLowerCase();
+    var minMatch = text.match(/^(\d+(?:\.\d+)?)\s*min/);
+    if (minMatch) return parseFloat(minMatch[1]);
+    var parts = String(display).split(":");
+    if (parts.length === 3 && parts.every(function (p) { return /^\d+$/.test(p); })) {
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) + parseInt(parts[2], 10) / 60;
+    }
+    if (parts.length === 2 && parts.every(function (p) { return /^\d+$/.test(p); })) {
+      return parseInt(parts[0], 10) + parseInt(parts[1], 10) / 60;
+    }
+    var numeric = parseFloat(text);
+    return isNaN(numeric) ? 0 : numeric;
+  }
+
   function createRowData(cpt, duration, region) {
     rowCounter += 1;
     return {
       id: "llm-row-" + rowCounter,
       cpt: cpt || "",
-      duration: duration || 15,
+      duration: duration === undefined || duration === null ? 0 : duration,
       region: region || "",
     };
+  }
+
+  function rowsFromFinalize(finalize) {
+    if (!finalize || !finalize.lines || !finalize.lines.length) return null;
+    return finalize.lines.map(function (line) {
+      return createRowData(
+        line.cpt_code,
+        Math.round(parseDurationDisplay(line.duration_display)),
+        line.region && line.region !== "--" ? line.region : ""
+      );
+    });
   }
 
   function bindRowEvents() {
@@ -81,7 +110,7 @@
           escapeHtmlFn(row.cpt) +
           "\" placeholder=\"97110\" /></label>" +
           "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400\">Min</span>" +
-          "<input type=\"number\" min=\"1\" step=\"1\" class=\"llm-input-duration w-full rounded-xl border border-blue-100 bg-white px-2.5 py-2 text-xs text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 shadow-sm\" value=\"" +
+          "<input type=\"number\" min=\"0\" step=\"1\" class=\"llm-input-duration w-full rounded-xl border border-blue-100 bg-white px-2.5 py-2 text-xs text-slate-700 focus:border-ast-blue/40 focus:outline-none focus:ring-2 focus:ring-ast-blue/20 shadow-sm\" value=\"" +
           escapeHtmlFn(String(row.duration)) +
           "\" /></label>" +
           "<label class=\"block\"><span class=\"mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400\">Region</span>" +
@@ -111,7 +140,7 @@
     rowsEl.querySelectorAll(".llm-edit-row").forEach(function (rowNode) {
       var cpt = rowNode.querySelector(".llm-input-cpt")?.value.trim();
       var minutes = parseFloat(rowNode.querySelector(".llm-input-duration")?.value || "0");
-      if (!cpt || minutes <= 0) return;
+      if (!cpt || isNaN(minutes) || minutes < 0) return;
       codes.push({
         cpt: cpt,
         minutes: minutes,
@@ -132,7 +161,7 @@
     isLoading = loading;
     if (calcBtn) calcBtn.disabled = loading;
     if (calcLabel) {
-      calcLabel.textContent = loading ? "Calculating units..." : "Calculate Units";
+      calcLabel.textContent = loading ? "Calculating via LLM..." : "Calculate Units";
     }
   }
 
@@ -143,9 +172,12 @@
 
     var rows = (result.codes || [])
       .map(function (row) {
+        var ruleHtml = row.billing_rule
+          ? "<span class=\"block text-[10px] text-slate-400\">" + escapeHtmlFn(String(row.billing_rule).replace(/_/g, " ")) + "</span>"
+          : "";
         return (
           "<tr class=\"bg-white/90\">" +
-          "<td class=\"px-2 py-2 font-mono text-xs font-semibold text-ast-navy\">" + escapeHtmlFn(row.cpt) + "</td>" +
+          "<td class=\"px-2 py-2 font-mono text-xs font-semibold text-ast-navy\">" + escapeHtmlFn(row.cpt) + ruleHtml + "</td>" +
           "<td class=\"px-2 py-2 text-center text-xs text-slate-600\">" + escapeHtmlFn(String(row.minutes)) + "</td>" +
           "<td class=\"px-2 py-2 text-center text-xs font-bold text-ast-navy\">" + escapeHtmlFn(String(row.units)) + "</td>" +
           "<td class=\"px-2 py-2 text-[11px] leading-relaxed text-slate-600\">" + escapeHtmlFn(row.explanation || "") + "</td>" +
@@ -217,7 +249,7 @@
     if (!codes.length) {
       if (resultsEl) {
         resultsEl.innerHTML =
-          "<div class=\"rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700\">Add at least one CPT code with a duration greater than 0.</div>";
+          "<div class=\"rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700\">Add at least one CPT code.</div>";
       }
       return;
     }
@@ -281,6 +313,13 @@
     return current;
   }
 
+  function applySessionBillingRule(rule) {
+    if (!rule) return;
+    billingRule = rule;
+    var radio = document.querySelector('input[name="llm-billing-rule"][value="' + rule + '"]');
+    if (radio) radio.checked = true;
+  }
+
   window.LlmUnitCalculator = {
     init: function (apiUrlResolver, escapeHtml) {
       resolveApiUrl = apiUrlResolver;
@@ -306,11 +345,20 @@
       ensureDefaultRows();
     },
 
-    onReviewShown: function () {
+    onReviewShown: function (finalize, ui) {
       showPanel(true);
-      ensureDefaultRows();
-      if (lastResult) {
-        renderResults(lastResult);
+      if (ui && ui.summary_cards && ui.summary_cards.billing_rule) {
+        applySessionBillingRule(ui.summary_cards.billing_rule);
+      }
+      var summaryRows = rowsFromFinalize(finalize);
+      if (summaryRows && summaryRows.length) {
+        renderEditableRows(summaryRows);
+        clearResults();
+      } else {
+        ensureDefaultRows();
+        if (lastResult) {
+          renderResults(lastResult);
+        }
       }
     },
 

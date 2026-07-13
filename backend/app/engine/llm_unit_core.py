@@ -22,6 +22,9 @@ Given CPT codes and their rule-specific inputs, calculate billable units using e
 Do not validate against any billing engine, transcript, or patient summary.
 Do not compare to pre-assigned units.
 Only calculate units from the provided duration, occurrence, area, and billing metadata. Do not invent missing values.
+For each code, explanation must describe the billing_rule applied and the duration or occurrence inputs used.
+Never fail or zero a line solely because duration_minutes is positive on an untimed rule.
+Use timed_pool_minutes only for 8_minute_rule lines under Medicare pooling.
 
 Return ONLY valid JSON matching the required schema."""
 
@@ -121,10 +124,25 @@ def calculator_raw_lines(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def unit_calc_raw_lines(codes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {"cpt": code["cpt"], "minutes": code["minutes"], "duration_minutes": code["minutes"]}
-        for code in codes
-    ]
+    lines: list[dict[str, Any]] = []
+    for code in codes:
+        cpt = str(code.get("cpt", "")).strip()
+        if not cpt:
+            continue
+        minutes = max(0.0, float(code.get("minutes", 0) or 0))
+        line: dict[str, Any] = {
+            "cpt": cpt,
+            "minutes": minutes,
+            "duration_minutes": minutes,
+        }
+        if code.get("region"):
+            line["body_region"] = code["region"]
+        if code.get("occurrence_count") is not None:
+            line["occurrence_count"] = int(code["occurrence_count"])
+        if code.get("area_sq_cm") is not None:
+            line["area_sq_cm"] = float(code["area_sq_cm"])
+        lines.append(line)
+    return lines
 
 
 def build_calculate_user_prompt(
@@ -135,7 +153,8 @@ def build_calculate_user_prompt(
     payload = build_billing_payload(raw_lines, billing_rule, store)
     return (
         "Calculate billable units for the following CPT codes and durations. "
-        "Use timed_pool_minutes for Medicare pooling (timed lines only).\n\n"
+        "Use timed_pool_minutes for Medicare pooling (timed lines only). "
+        "Return one output row per input CPT with a concise explanation per code.\n\n"
         f"{json.dumps(payload, indent=2)}\n\n"
         "Apply the specified timing rule and return units per code plus total_units. "
         "total_units must sum units from every applicable billing rule."

@@ -40,6 +40,11 @@ SUGGEST_CONFLICT_INSTRUCTION = (
     "into an existing code."
 )
 
+EXACT_QUOTE_INSTRUCTION = (
+    "For each suggested CPT, extract the exact 3-7 consecutive words from the transcript "
+    "that justify the suggestion. Return that substring verbatim in exact_quote. Do not paraphrase."
+)
+
 
 def filter_suggestable_cpts(
     suggested: list[dict[str, Any]],
@@ -81,6 +86,10 @@ class CptVerificationResponse(BaseModel):
 class SuggestedCptItem(BaseModel):
     cpt_code: str = Field(description="The suggested CPT code")
     reasoning: str = Field(description="Why this code is supported by the transcript")
+    exact_quote: str = Field(
+        default="",
+        description="Exact 3-7 word transcript substring supporting this suggestion",
+    )
 
 
 class SuggestedCptsResponse(BaseModel):
@@ -188,6 +197,8 @@ Transcript:
 {transcript}{hints_suffix}
 
 Output only CPT codes that are explicitly supported by the transcript, are present in the Medexa Dictionary, and would not be auto-rejected by the conflict guardrails above.
+
+{EXACT_QUOTE_INSTRUCTION}
 """
 
 
@@ -210,6 +221,8 @@ Transcript:
 {transcript}{hints_suffix}
 
 Output only CPT codes that are explicitly supported by the transcript, are present in the Medexa Dictionary, and would not be auto-rejected by the conflict guardrails above.
+
+{EXACT_QUOTE_INSTRUCTION}
 """
 
 
