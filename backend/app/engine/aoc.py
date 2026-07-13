@@ -41,7 +41,7 @@ def validate_addon_codes(
             continue
         allowed = rec.get("addonCodesAllowed") or []
         for addon in allowed:
-            if addon in store.general and addon not in active_cpts:
+            if store.knows_cpt(addon) and addon not in active_cpts:
                 issues.append(
                     Issue(
                         severity="info",

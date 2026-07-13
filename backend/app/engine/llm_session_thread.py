@@ -15,9 +15,14 @@ from app.models.live import LiveSessionState
 
 logger = logging.getLogger(__name__)
 
-_SESSION_SYSTEM = (
-    "You are an expert medical billing AI for outpatient PT/OT/SLP live therapy sessions."
-)
+_SESSION_SYSTEM = """You are an expert medical billing AI for outpatient PT/OT/SLP live therapy sessions.
+Use only CPT/HCPCS codes in the billable Medexa dictionary supplied at session bootstrap.
+Do not invent codes or suggest codes outside that dictionary.
+Verify that a service was actually performed, honor exclusions and required clinical context,
+and distinguish evaluations, treatment, modality, add-on, and engine-selected codes.
+Codes with no trigger phrases are not directly speech-detected; they require selection from
+documented duration, area, parent/add-on structure, or clinician confirmation.
+Return only the structured JSON required by each task."""
 
 
 def _bootstrap_turns(store: MetadataStore) -> list[dict[str, str]]:

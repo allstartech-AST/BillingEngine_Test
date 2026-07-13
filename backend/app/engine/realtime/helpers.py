@@ -1,7 +1,8 @@
 import re
 
-from app.engine.eight_minute import calculate_units as calculate_units_cms
-from app.engine import ama_rule
+from app.engine.billing_dispatcher import calculate_all_units
+from app.engine.billing_rule_catalog import live_rule_meta, rule_badge_label
+from app.engine.eight_minute import EIGHT_MINUTE_RULE
 from app.engine.icd10 import icd_code_variants
 from app.engine.loader import MetadataStore
 from app.engine.mue import apply_mue_cap
@@ -146,11 +147,38 @@ def _apply_conflict_pending(state: LiveSessionState) -> None:
                     row.billing_status = "confirmed"
 
 
-def _refresh_completed_rule_messages(state: LiveSessionState) -> None:
+def _build_live_segments(state: LiveSessionState) -> dict[str, dict]:
+    segments: dict[str, dict] = {}
     for row in state.cpts:
         if row.lifecycle != "completed":
             continue
-        if row.is_timed:
+        cpt = row.cpt_code
+        if cpt not in segments:
+            segments[cpt] = {
+                "minutes_exact": 0.0,
+                "minutes_billed": 0,
+                "minutes": 0.0,
+                "sequences": [],
+                "area_sq_cm": 0.0,
+                "occurrence_count": 0,
+            }
+        seg = segments[cpt]
+        seg["minutes_exact"] += row.duration_minutes_exact
+        seg["minutes_billed"] += row.minutes_billed
+        seg["minutes"] += row.duration_minutes_exact
+        seg["sequences"].append(row.sequence)
+        seg["occurrence_count"] = len(seg["sequences"])
+        if row.area_sq_cm > 0:
+            seg["area_sq_cm"] = row.area_sq_cm
+    return segments
+
+
+def _refresh_completed_rule_messages(state: LiveSessionState, store: MetadataStore) -> None:
+    for row in state.cpts:
+        if row.lifecycle != "completed":
+            continue
+        meta = live_rule_meta(row.cpt_code, store)
+        if row.billing_rule == EIGHT_MINUTE_RULE:
             if state.billing_rule == "ama_rule_of_8":
                 row.rule_message = (
                     f"{row.units} unit(s) billed under AMA Rule of 8 "
@@ -161,10 +189,19 @@ def _refresh_completed_rule_messages(state: LiveSessionState) -> None:
                     f"{row.units} unit(s) billed after pooled 8-minute rule "
                     f"({row.duration_minutes_exact:g} min recorded for this code)."
                 )
+        elif meta.timer_mode == "area":
+            row.rule_message = (
+                f"{row.units} unit(s) from area-based rule "
+                f"({row.area_sq_cm:g} sq cm recorded)."
+            )
+        elif meta.timer_mode == "occurrence":
+            row.rule_message = (
+                f"{row.units} unit(s) under {rule_badge_label(meta)}."
+            )
         else:
             row.rule_message = (
-                f"Duration recorded ({row.duration_minutes_exact:g} min). "
-                "Units are calculated manually by the therapist."
+                f"{row.units} unit(s) under {rule_badge_label(meta)} "
+                f"({row.duration_minutes_exact:g} min recorded)."
             )
         _sync_row_messages(row)
 
@@ -176,49 +213,38 @@ def _recalculate_units(state: LiveSessionState, store: MetadataStore) -> None:
     for conflict in open_conflicts:
         pending_cpts |= conflict_codes(conflict)
 
-    segments: dict[str, dict] = {}
-    for row in state.cpts:
-        if row.lifecycle != "completed":
-            continue
-        if not row.is_timed:
-            row.units = 0
-            continue
-        segments[row.cpt_code] = {
-            "minutes_exact": row.duration_minutes_exact,
-            "minutes_billed": row.minutes_billed,
-            "minutes": row.duration_minutes_exact,
-            "sequences": [row.sequence],
-        }
-
+    segments = _build_live_segments(state)
     if not segments:
+        for row in state.cpts:
+            if row.lifecycle == "completed":
+                row.units = 0
         return
 
-    if state.billing_rule == "ama_rule_of_8":
-        unit_results = ama_rule.calculate_units(segments, store)
-    else:
-        unit_results = calculate_units_cms(segments, store)
+    unit_results = calculate_all_units(segments, store, state.billing_rule)
     by_cpt = {item.cpt_code: item for item in unit_results}
+
+    units_by_cpt: dict[str, int] = {}
+    for cpt, res in by_cpt.items():
+        capped, _limit = apply_mue_cap(cpt, res.units, store)
+        units_by_cpt[cpt] = capped
+
     for row in state.cpts:
         if row.lifecycle != "completed":
             continue
-        if not row.is_timed:
-            continue
+        units = units_by_cpt.get(row.cpt_code, 0)
+        if row.cpt_code in pending_cpts and "ncci_bundling" in row.pending_reasons:
+            units = 0
+        row.units = units
+        row.mue_note = ""
         res = by_cpt.get(row.cpt_code)
         if res:
-            capped, limit = apply_mue_cap(row.cpt_code, res.units, store)
-            row.units = capped
-            if capped < res.units and limit is not None:
-                row.mue_note = f"MUE limit {limit} (remaining minutes discarded)"
-            else:
-                row.mue_note = ""
-        else:
-            row.units = 0
-            row.mue_note = ""
-            
-        if row.cpt_code in pending_cpts and "ncci_bundling" in row.pending_reasons:
-            row.units = 0
+            capped = units_by_cpt.get(row.cpt_code, 0)
+            if capped < res.units:
+                _, limit = apply_mue_cap(row.cpt_code, res.units, store)
+                if limit is not None:
+                    row.mue_note = f"MUE limit {limit} (remaining minutes discarded)"
 
-    _refresh_completed_rule_messages(state)
+    _refresh_completed_rule_messages(state, store)
 
 
 def _refresh_conflicts(state: LiveSessionState, store: MetadataStore) -> None:

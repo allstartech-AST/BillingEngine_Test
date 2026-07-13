@@ -1,4 +1,4 @@
-from app.engine.eight_minute import calculate_units
+from app.engine.billing_dispatcher import calculate_all_units
 from app.engine.loader import MetadataStore
 from app.engine.mue import apply_mue_cap
 from app.models.output import BillingConflict
@@ -28,7 +28,7 @@ def calculate_provisional_unit_maps(
         return {}, {}
 
     max_map: dict[str, int] = {}
-    for item in calculate_units(active_segments, store):
+    for item in calculate_all_units(active_segments, store):
         units, _ = apply_mue_cap(item.cpt_code, item.units, store)
         max_map[item.cpt_code] = units
 
@@ -41,7 +41,7 @@ def calculate_provisional_unit_maps(
     }
     conservative_map: dict[str, int] = {cpt: 0 for cpt in active_cpts}
     if conservative_segments:
-        for item in calculate_units(conservative_segments, store):
+        for item in calculate_all_units(conservative_segments, store):
             units, _ = apply_mue_cap(item.cpt_code, item.units, store)
             conservative_map[item.cpt_code] = units
 

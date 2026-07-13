@@ -1,3 +1,5 @@
+from app.engine.billing_rule_catalog import live_rule_meta, rule_badge_label
+from app.engine.eight_minute import EIGHT_MINUTE_RULE
 from app.engine.loader import MetadataStore
 from app.engine.ui_display import format_duration_mmss, format_session_duration
 from app.models.live import FinalizeCptLine, FinalizeDisplay, LiveCptRow, LiveSessionState
@@ -28,6 +30,23 @@ def _display_duration(row: LiveCptRow) -> str:
     return "—"
 
 
+def _billing_rule_label(
+    row: LiveCptRow,
+    store: MetadataStore,
+    session_billing_rule: str,
+) -> str:
+    meta = live_rule_meta(row.cpt_code, store)
+    if meta.billing_rule == EIGHT_MINUTE_RULE:
+        return (
+            "AMA Rule of 8"
+            if session_billing_rule == "ama_rule_of_8"
+            else "8-Minute Rule"
+        )
+    if not meta.billing_rule:
+        return "—"
+    return rule_badge_label(meta)
+
+
 def build_finalize_display(state: LiveSessionState, store: MetadataStore) -> FinalizeDisplay:
     lines: list[FinalizeCptLine] = []
     total_minutes = 0.0
@@ -52,7 +71,8 @@ def build_finalize_display(state: LiveSessionState, store: MetadataStore) -> Fin
             units=units,
             duration_display=duration_display,
             region=row.region,
-            is_timed=row.is_timed,
+            billing_rule=row.billing_rule,
+            billing_rule_label=_billing_rule_label(row, store, state.billing_rule),
             applied_modifiers=mods,
         )
         if row.lifecycle == "removed":

@@ -1,4 +1,10 @@
 
+from app.engine.billing_rule_catalog import (
+    live_rule_meta,
+    rule_detect_message,
+    uses_duration_for_units,
+)
+from app.engine.eight_minute import EIGHT_MINUTE_RULE
 from app.engine.loader import MetadataStore
 from app.models.live import LiveSessionResponse
 from app.engine.realtime.store import get_session, save_session
@@ -10,6 +16,29 @@ from app.engine.realtime.helpers import (
 )
 from app.engine.realtime.rules import unresolved_bypassable
 from app.models.live import LiveCptRow
+
+
+def _running_duration_unit_row(state, store: MetadataStore, exclude_cpt: str) -> LiveCptRow | None:
+    for row in state.cpts:
+        if row.cpt_code == exclude_cpt or row.lifecycle != "running":
+            continue
+        if uses_duration_for_units(live_rule_meta(row.cpt_code, store).timer_mode):
+            return row
+    return None
+
+
+def _new_cpt_row(code: str, state, store: MetadataStore) -> LiveCptRow:
+    meta = live_rule_meta(code, store)
+    return LiveCptRow(
+        cpt_code=code,
+        sequence=_next_sequence(state.cpts),
+        lifecycle="detected",
+        billing_rule=meta.billing_rule,
+        billing_status="confirmed",
+        rule_message=rule_detect_message(meta, state.billing_rule),
+        occurrence_count=1,
+    )
+
 
 def on_cpt_detected(session_id: str, cpt_code: str, store: MetadataStore) -> LiveSessionResponse:
     state = get_session(session_id)
@@ -39,29 +68,7 @@ def on_cpt_detected(session_id: str, cpt_code: str, store: MetadataStore) -> Liv
             f"CPT {code} is not in billing metadata — not added to session.",
         )
 
-    is_timed = store.is_timed(code)
-    if is_timed:
-        row = LiveCptRow(
-            cpt_code=code,
-            sequence=_next_sequence(state.cpts),
-            lifecycle="detected",
-            is_timed=True,
-            billing_status="confirmed",
-            rule_message=(
-                f"{'AMA Rule of 8' if state.billing_rule == 'ama_rule_of_8' else '8-minute rule'} applies — provide duration when this CPT ends." 
-                if is_timed else "Occurrence/modality code — units are calculated manually."
-            ),
-        )
-    else:
-        row = LiveCptRow(
-            cpt_code=code,
-            sequence=_next_sequence(state.cpts),
-            lifecycle="manual_billing",
-            is_timed=False,
-            billing_status="manual",
-            rule_message="Occurrence/modality code — units are calculated manually by the therapist.",
-        )
-
+    row = _new_cpt_row(code, state, store)
     _apply_icd_validation(row, state.icds, store)
     _sync_row_messages(row)
 
@@ -75,7 +82,8 @@ def on_cpt_detected(session_id: str, cpt_code: str, store: MetadataStore) -> Liv
     _sync_all_row_messages(state)
     save_session(state)
 
-    rule_note = f"Timed CPT ({'AMA Rule of 8' if state.billing_rule == 'ama_rule_of_8' else '8-minute rule'})." if is_timed else "Manual/occurrence billing."
+    meta = live_rule_meta(code, store)
+    rule_note = rule_detect_message(meta, state.billing_rule)
     icd_note = f" {row.icd_guidance}" if row.icd_guidance else ""
     return _live_response(
         state,
@@ -92,14 +100,15 @@ def on_cpt_start(session_id: str, cpt_code: str, store: MetadataStore) -> LiveSe
     if not row:
         return _live_response(state, store, f"CPT {cpt_code} not found.")
 
-    if row.is_timed:
-        for r in state.cpts:
-            if r.cpt_code != row.cpt_code and r.is_timed and r.lifecycle == "running":
-                from fastapi import HTTPException
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cannot start multiple timed codes. Please pause {r.cpt_code} first."
-                )
+    meta = live_rule_meta(row.cpt_code, store)
+    if uses_duration_for_units(meta.timer_mode):
+        running = _running_duration_unit_row(state, store, row.cpt_code)
+        if running:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot start multiple duration-based codes. Please pause {running.cpt_code} first.",
+            )
 
     row.lifecycle = "running"
     _sync_row_messages(row)
@@ -115,14 +124,14 @@ def on_cpt_pause(
 ) -> LiveSessionResponse:
     state = get_session(session_id)
     _reactivate_session(state)
-    
+
     row = _find_row(state.cpts, cpt_code.strip())
     if not row:
         return _live_response(state, store, f"CPT {cpt_code} not found.")
-        
+
     if row.lifecycle != "running":
         return _live_response(state, store, f"CPT {cpt_code} is not currently running.")
-        
+
     row.lifecycle = "paused"
     row.duration_minutes_exact = round(float(duration_minutes), 2)
     _sync_row_messages(row)
@@ -133,27 +142,49 @@ def on_cpt_pause(
 def on_cpt_resume(session_id: str, cpt_code: str, store: MetadataStore) -> LiveSessionResponse:
     state = get_session(session_id)
     _reactivate_session(state)
-    
+
     row = _find_row(state.cpts, cpt_code.strip())
     if not row:
         return _live_response(state, store, f"CPT {cpt_code} not found.")
-        
+
     if row.lifecycle != "paused":
         return _live_response(state, store, f"CPT {cpt_code} is not currently paused.")
-        
-    if row.is_timed:
-        for r in state.cpts:
-            if r.cpt_code != row.cpt_code and r.is_timed and r.lifecycle == "running":
-                from fastapi import HTTPException
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cannot resume timed code. Please pause {r.cpt_code} first."
-                )
-                
+
+    meta = live_rule_meta(row.cpt_code, store)
+    if uses_duration_for_units(meta.timer_mode):
+        running = _running_duration_unit_row(state, store, row.cpt_code)
+        if running:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot resume duration-based code. Please pause {running.cpt_code} first.",
+            )
+
     row.lifecycle = "running"
     _sync_row_messages(row)
     save_session(state)
     return _live_response(state, store, f"CPT {cpt_code} resumed.")
+
+
+def on_cpt_area(
+    session_id: str,
+    cpt_code: str,
+    area_sq_cm: float,
+    store: MetadataStore,
+) -> LiveSessionResponse:
+    state = get_session(session_id)
+    _reactivate_session(state)
+
+    row = _find_row(state.cpts, cpt_code.strip())
+    if not row:
+        return _live_response(state, store, f"CPT {cpt_code} not found.")
+
+    row.area_sq_cm = round(float(area_sq_cm), 2)
+    if row.lifecycle == "completed":
+        _reconcile_billing_state_and_save(state, store)
+    else:
+        save_session(state)
+    return _live_response(state, store, f"CPT {cpt_code} area set to {row.area_sq_cm:g} sq cm.")
 
 
 def on_cpt_end(
@@ -183,46 +214,39 @@ def on_cpt_end(
     if row.lifecycle not in ("detected", "manual_billing", "billing", "running", "pending_start", "paused"):
         return _live_response(state, store, row.message or f"CPT {row.cpt_code} cannot be ended.")
 
-    if row.lifecycle in ("manual_billing", "pending_start", "running", "paused") and not row.is_timed:
-        row.lifecycle = "completed"
-        row.duration_minutes_exact = round(float(duration_minutes), 2)
-        row.minutes_billed = int(round(duration_minutes))
-        row.units = 0
-        row.rule_message = (
-            f"Duration recorded ({row.duration_minutes_exact} min). "
-            "Units are calculated manually by the therapist (not under timed rule)."
-        )
-        _sync_row_messages(row)
-        _reconcile_billing_state_and_save(state, store)
-        return _live_response(
-            state,
-            store,
-            (
-                f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact} min. "
-                "Manual billing — units not auto-calculated."
-            ),
-        )
-
     if row.lifecycle == "error":
         return _live_response(state, store, row.message)
 
     row.lifecycle = "completed"
     row.duration_minutes_exact = round(float(duration_minutes), 2)
     row.minutes_billed = int(round(duration_minutes))
+    row.occurrence_count = 1
 
     _reconcile_billing_state(state, store)
     open_conflicts = unresolved_bypassable(state.conflicts, set(state.resolved_conflicts))
+    meta = live_rule_meta(row.cpt_code, store)
     if open_conflicts:
         msg = (
-            f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact} min; "
+            f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact:g} min; "
             f"units pending modifier resolution ({len(open_conflicts)} open conflict(s))."
+        )
+    elif row.billing_rule == EIGHT_MINUTE_RULE:
+        msg = (
+            f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact:g} min, "
+            f"{row.units} unit(s) after timed rule."
+        )
+    elif meta.timer_mode == "occurrence":
+        msg = f"CPT {row.cpt_code} completed — {row.units} unit(s) under {meta.billing_rule}."
+    elif meta.timer_mode == "area":
+        msg = (
+            f"CPT {row.cpt_code} ended — {row.units} unit(s) "
+            f"({row.area_sq_cm:g} sq cm recorded)."
         )
     else:
         msg = (
-            f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact} min, "
-            f"{row.units} unit(s) after pooled 8-minute rule."
+            f"CPT {row.cpt_code} ended — duration {row.duration_minutes_exact:g} min, "
+            f"{row.units} unit(s) calculated."
         )
 
     save_session(state)
     return _live_response(state, store, msg)
-

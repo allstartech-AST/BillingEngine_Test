@@ -25,7 +25,7 @@ class LiveCptRow(BaseModel):
         "error",
         "ai_suggested",
     ] = "detected"
-    is_timed: bool = False
+    billing_rule: str | None = None
     duration_minutes_exact: float = 0.0
     minutes_billed: int = 0
     units: int = 0
@@ -46,7 +46,10 @@ class LiveCptRow(BaseModel):
     mue_note: str = ""
     ai_supported: bool | None = None
     ai_reasoning: str = ""
+    ai_confidence: int | None = None
     region: str = "--"
+    area_sq_cm: float = 0.0
+    occurrence_count: int = 1
 
 
 class LiveSessionState(BaseModel):
@@ -95,6 +98,11 @@ class LiveCptDurationRequest(BaseModel):
     cpt_code: str
     duration_minutes: float
 
+
+class LiveCptAreaRequest(BaseModel):
+    cpt_code: str
+    area_sq_cm: float
+
 class LiveTranscriptSentenceRequest(BaseModel):
     sentence: str
     sentence_count: int = Field(default=1, ge=1)
@@ -106,7 +114,8 @@ class FinalizeCptLine(BaseModel):
     units: int
     duration_display: str
     region: str = "--"
-    is_timed: bool = True
+    billing_rule: str | None = None
+    billing_rule_label: str = "—"
     applied_modifiers: list[str] = Field(default_factory=list)
 
 

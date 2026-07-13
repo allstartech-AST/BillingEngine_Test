@@ -8,8 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.engine import ama_rule
-from app.engine.eight_minute import calculate_units as calculate_units_cms
+from app.engine.billing_dispatcher import calculate_all_units
 from app.engine.llm_billing_common import ruleset_label
 from app.engine.loader import MetadataStore
 
@@ -27,7 +26,9 @@ class SummaryValidateLine(BaseModel):
     cpt: str
     duration_minutes: float = Field(ge=0)
     summary_units: int = Field(ge=0)
-    is_timed: bool | None = None
+    billing_rule: str | None = None
+    occurrence_count: int = Field(default=1, ge=1)
+    area_sq_cm: float | None = Field(default=None, ge=0)
 
 
 class SummaryValidateRequest(BaseModel):
@@ -39,7 +40,7 @@ class SummaryValidateRequest(BaseModel):
 class SummaryValidateRow(BaseModel):
     cpt: str
     duration_minutes: int
-    is_timed: bool
+    billing_rule: str | None
     expected_units: int
     summary_units: int
     status: str
@@ -61,14 +62,15 @@ def _rule_label(billing_rule: str) -> str:
 
 def _build_segments(lines: list[SummaryValidateLine]) -> dict[str, dict]:
     segments: dict[str, dict] = {}
-    for index, line in enumerate(lines, start=1):
+    for line in lines:
         cpt = line.cpt.strip()
         minutes_billed = max(0, int(round(line.duration_minutes)))
         segments[cpt] = {
             "minutes": float(line.duration_minutes),
             "minutes_exact": float(line.duration_minutes),
             "minutes_billed": minutes_billed,
-            "sequences": [index],
+            "sequences": list(range(1, line.occurrence_count + 1)),
+            "area_sq_cm": float(line.area_sq_cm or 0),
         }
     return segments
 
@@ -82,10 +84,7 @@ def _expected_units_by_cpt(
     if not segments:
         return {}
 
-    if billing_rule == "ama_rule_of_8":
-        unit_results = ama_rule.calculate_units(segments, store)
-    else:
-        unit_results = calculate_units_cms(segments, store)
+    unit_results = calculate_all_units(segments, store, billing_rule)
 
     return {item.cpt_code: item.units for item in unit_results}
 
@@ -110,7 +109,11 @@ def validate_summary_units_local(
 
     for line in lines:
         cpt = line.cpt.strip()
-        is_timed = line.is_timed if line.is_timed is not None else store.is_timed(cpt)
+        cpt_billing_rule = (
+            line.billing_rule
+            if line.billing_rule is not None
+            else store.billing_rule(cpt)
+        )
         duration_minutes = max(0, int(round(line.duration_minutes)))
         expected_units = expected_map.get(cpt, 0)
         summary_units = line.summary_units
@@ -135,7 +138,7 @@ def validate_summary_units_local(
             SummaryValidateRow(
                 cpt=cpt,
                 duration_minutes=duration_minutes,
-                is_timed=is_timed,
+                billing_rule=cpt_billing_rule,
                 expected_units=expected_units,
                 summary_units=summary_units,
                 status="PASSED" if passed else "FAILED",

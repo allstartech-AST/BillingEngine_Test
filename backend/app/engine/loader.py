@@ -20,11 +20,13 @@ class MetadataStore:
     icd_keyword_index: dict[str, set[str]] = field(default_factory=dict)
 
     def knows_cpt(self, cpt_code: str) -> bool:
-        return cpt_code in self.general
+        return cpt_code in self.general or cpt_code in self.aoc
 
     def description(self, cpt_code: str) -> str:
         rec = self.general.get(cpt_code, {})
-        return rec.get("description", "")
+        if rec.get("description"):
+            return rec.get("description", "")
+        return ""
 
     def medexa_cpt_semantic_text(self, cpt_code: str) -> str:
         """Clinical text for CPT↔ICD semantic scoring from medexa_cpt_lookup.json."""
@@ -97,9 +99,17 @@ class MetadataStore:
                 return entry
         return None
 
-    def is_timed(self, cpt_code: str) -> bool:
+    def billing_rule(self, cpt_code: str) -> str | None:
+        """Per-CPT billing category from cpt_general_info or cpt_aoc_info."""
         rec = self.general.get(cpt_code, {})
-        return bool(rec.get("isTimed", False))
+        if "billingRule" in rec:
+            value = rec.get("billingRule")
+            return str(value) if value else None
+        if rec.get("isTimed"):
+            return "8_minute_rule"
+        aoc_rec = self.aoc.get(cpt_code, {})
+        aoc_rule = aoc_rec.get("billingRule")
+        return str(aoc_rule) if aoc_rule else None
 
 
 _store: MetadataStore | None = None
@@ -177,3 +187,6 @@ def load_metadata() -> MetadataStore:
 def reset_metadata_cache() -> None:
     global _store
     _store = None
+    from app.engine.pt_ot_slp_billing_categories import reset_category_rule_store
+
+    reset_category_rule_store()

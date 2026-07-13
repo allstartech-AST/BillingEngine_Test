@@ -8,10 +8,15 @@ import traceback
 
 from app.config import (
     LLM_ENRICHMENT_DEBOUNCE_SECONDS,
+    llm_provider_name,
     load_env_files,
     openai_api_key,
 )
-from app.engine.llm_cpt_tasks import suggest_missing_cpts_async, verify_cpt_async
+from app.engine.llm_cpt_tasks import (
+    filter_suggestable_cpts,
+    suggest_missing_cpts_async,
+    verify_cpt_async,
+)
 from app.engine.llm_modifier_tasks import suggest_modifiers_async
 from app.engine.llm_quota import quota_on_cooldown
 from app.engine.llm_session_thread import LiveEnrichmentThread
@@ -91,6 +96,13 @@ def _start_enrichment_if_idle(session_id: str, store: MetadataStore) -> None:
     loop.create_task(_ai_enrichment_worker(session_id, store))
 
 
+def _enrichment_thread(state, store: MetadataStore) -> LiveEnrichmentThread | None:
+    """Groq free-tier TPM cannot sustain the growing threaded context."""
+    if llm_provider_name() == "Groq":
+        return None
+    return LiveEnrichmentThread(state, store)
+
+
 async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
     if not openai_api_key():
         logger.warning("Skipping AI enrichment for %s — OPENAI_API_KEY is unset.", session_id)
@@ -116,9 +128,16 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                 from app.models.live import LiveCptRow
 
                 state = get_session(session_id)
-                llm_thread = LiveEnrichmentThread(state, store)
+                llm_thread = _enrichment_thread(state, store)
 
                 while True:
+                    if quota_on_cooldown():
+                        logger.info(
+                            "AI enrichment for %s paused — quota cooldown active",
+                            session_id,
+                        )
+                        break
+
                     state = get_session(session_id)
                     made_progress = False
                     _refresh_conflicts(state, store)
@@ -137,12 +156,24 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                                 )
                                 row.ai_supported = res.get("is_supported")
                                 row.ai_reasoning = res.get("reasoning", "")
+                                confidence = int(res.get("region_confidence") or 0)
+                                if row.ai_supported:
+                                    row.ai_confidence = confidence if confidence > 0 else 100
+                                else:
+                                    row.ai_confidence = confidence if confidence > 0 else None
                                 if res.get("region_confidence", 0) >= 80 and res.get("region"):
                                     row.region = res.get("region")
                             except Exception:
                                 row.ai_supported = False
                                 row.ai_reasoning = "Failed to parse AI response"
                             made_progress = True
+                            break
+
+                    if made_progress:
+                        _refresh_conflicts(state, store)
+                        _apply_conflict_pending(state)
+                        save_session(state)
+                        continue
 
                     for conflict in list(state.conflicts):
                         if conflict.conflict_type == "bypassable_bundle" and not conflict.ai_enriched:
@@ -175,6 +206,13 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                             except Exception:
                                 conflict.ai_enriched = True
                             made_progress = True
+                            break
+
+                    if made_progress:
+                        _refresh_conflicts(state, store)
+                        _apply_conflict_pending(state)
+                        save_session(state)
+                        continue
 
                     current_pointer = getattr(state, "last_cpt_suggestion_length", 0)
                     for seg_start, seg_end in suggest_segment_bounds(
@@ -202,6 +240,7 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                                 thread=llm_thread,
                             )
                             suggested = res.get("suggested_cpts", [])
+                            suggested = filter_suggestable_cpts(suggested, existing_cpts, store)
                             if suggested:
                                 for item in suggested:
                                     code = item.get("cpt_code")
@@ -210,7 +249,7 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                                             cpt_code=code,
                                             sequence=_next_sequence(state.cpts),
                                             lifecycle="ai_suggested",
-                                            is_timed=store.is_timed(code),
+                                            billing_rule=store.billing_rule(code),
                                             billing_status="pending_therapist_review",
                                             rule_message="AI suggested code based on transcript.",
                                             ai_supported=True,
@@ -220,14 +259,20 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                                         _sync_row_messages(row)
                                         state.cpts.append(row)
                                         existing_cpts.append(code)
-                                        made_progress = True
                         except Exception:
                             pass
                         current_pointer = seg_end
                         state.last_cpt_suggestion_length = current_pointer
-
-                    if not made_progress:
+                        made_progress = True
                         break
+
+                    if made_progress:
+                        _refresh_conflicts(state, store)
+                        _apply_conflict_pending(state)
+                        save_session(state)
+                        continue
+
+                    break
 
                 _refresh_conflicts(state, store)
                 _apply_conflict_pending(state)

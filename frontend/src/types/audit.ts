@@ -43,7 +43,7 @@ export interface BillingReport {
     description: string;
     duration_minutes: number;
     units: number;
-    is_timed: boolean;
+    billing_rule: string | null;
   }>;
   billing_conflicts: Array<{
     conflict_id: string;

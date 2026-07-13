@@ -15,19 +15,19 @@ from app.engine.loader import MetadataStore, load_metadata
 
 CALCULATE_SYSTEM_PROMPT = f"""You are an expert in US outpatient rehabilitation therapy (PT/OT/SLP) billing unit calculations.
 
-Given CPT codes and durations in minutes, calculate billable units using ONLY the timing rule specified in the input.
+Given CPT codes and their rule-specific inputs, calculate billable units using each line's billing_rule. Use the session rule only for 8_minute_rule lines.
 
 {timing_rules_system_instructions()}
 
 Do not validate against any billing engine, transcript, or patient summary.
 Do not compare to pre-assigned units.
-Only calculate units from the provided codes and minutes.
+Only calculate units from the provided duration, occurrence, area, and billing metadata. Do not invent missing values.
 
 Return ONLY valid JSON matching the required schema."""
 
 AUDIT_SYSTEM_PROMPT = f"""You are an expert US Healthcare Billing Compliance Auditor specializing in outpatient rehabilitation therapy (PT/OT/SLP) CPT coding.
 
-Your role is to independently audit a proposed therapy session billing scenario using your regulatory knowledge — NOT any external lookup files or databases supplied by the user.
+Your role is to independently audit a proposed therapy session billing scenario using the billing metadata supplied in the payload.
 
 {timing_rules_system_instructions()}
 
@@ -105,15 +105,19 @@ AUDIT_RESPONSE_SCHEMA: dict[str, Any] = {
 
 
 def calculator_raw_lines(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        line = {
             "cpt": row["cpt"],
             "minutes": row["duration_minutes"],
             "duration_minutes": row["duration_minutes"],
             "body_region": row.get("body_region") or "",
         }
-        for row in rows
-    ]
+        for key in ("billing_rule", "sequences", "occurrence_count", "area_sq_cm"):
+            if key in row and row[key] is not None:
+                line[key] = row[key]
+        result.append(line)
+    return result
 
 
 def unit_calc_raw_lines(codes: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -134,7 +138,7 @@ def build_calculate_user_prompt(
         "Use timed_pool_minutes for Medicare pooling (timed lines only).\n\n"
         f"{json.dumps(payload, indent=2)}\n\n"
         "Apply the specified timing rule and return units per code plus total_units. "
-        "total_units must sum timed-code units plus untimed occurrence units only."
+        "total_units must sum units from every applicable billing rule."
     )
 
 

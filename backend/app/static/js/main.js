@@ -12,6 +12,151 @@ function apiUrl(path) {
   return API_BASE + path;
 }
 
+function isEightMinuteRule(billingRule) {
+  return billingRule === "8_minute_rule";
+}
+
+function needsManualUnitsInput(billingRule) {
+  return false;
+}
+
+function billingRuleLabel(line, ui) {
+  if (line.billing_rule_label) {
+    return line.billing_rule_label;
+  }
+  if (isEightMinuteRule(line.billing_rule)) {
+    const sessionRule = ui && ui.summary_cards && ui.summary_cards.billing_rule;
+    return sessionRule === "ama_rule_of_8" ? "AMA Rule of 8" : "8-Minute Rule";
+  }
+  if (!line.billing_rule) {
+    return "—";
+  }
+  return String(line.billing_rule).replace(/_/g, " ").replace(/\b\w/g, function (c) {
+    return c.toUpperCase();
+  });
+}
+
+function defaultTimerMeta(card) {
+  return {
+    timer_mode: isEightMinuteRule(card.billing_rule) ? "duration_units" : "occurrence",
+    block_minutes: null,
+    increment_minutes: null,
+    time_band_min: null,
+    time_band_max: null,
+    area_threshold_sq_cm: null,
+    increment_sq_cm: null,
+    session_billing_rule: "cms_8_minute",
+    area_sq_cm: 0,
+    occurrence_count: 1,
+    auto_units: isEightMinuteRule(card.billing_rule),
+  };
+}
+
+function cardTimerMeta(card) {
+  return card.timer_meta || defaultTimerMeta(card);
+}
+
+function amaUnitsFromMinutes(minutes) {
+  const whole = Math.floor(minutes);
+  const base = Math.floor(whole / 15);
+  const remainder = whole % 15;
+  return remainder >= 8 ? base + 1 : base;
+}
+
+function cmsUnitsFromMinutes(minutes) {
+  if (minutes <= 7) return 0;
+  return 1 + Math.floor((minutes - 8) / 15);
+}
+
+function minutesInBand(minutes, low, high) {
+  if (minutes < low) return false;
+  if (high == null) return true;
+  return minutes <= high;
+}
+
+function computeLiveTimerState(meta, elapsedSec, billingRule) {
+  const elapsed = elapsedSec;
+  const result = {
+    displayMmSs: formatTimerDisplay(elapsed),
+    countdownText: "",
+    previewUnits: 0,
+    showCountdown: false,
+    durationLabel: elapsed + " min (running)",
+  };
+
+  if (meta.timer_mode === "duration_units") {
+    result.showCountdown = true;
+    if (billingRule === "8_minute_rule") {
+      const isAma = meta.session_billing_rule === "ama_rule_of_8";
+      const units = isAma ? amaUnitsFromMinutes(elapsed) : cmsUnitsFromMinutes(elapsed);
+      result.previewUnits = units;
+      if (isAma) {
+        const nextThreshold = units === 0 ? 8 : (units * 15 + (units > 0 ? 0 : 8));
+        const target = units === 0 ? 8 : units * 15 + (elapsed % 15 >= 8 ? 15 : 8);
+        const rem = (units === 0 ? 8 : (Math.floor(elapsed / 15) + 1) * 15 + (elapsed % 15 < 8 ? 8 - (elapsed % 15) : 0)) - elapsed;
+        result.countdownText = `(${Math.max(0, rem)}s to next unit — AMA)`;
+      } else {
+        let target = 8;
+        if (elapsed >= 8) {
+          const k = elapsed - 8;
+          const u = 1 + Math.floor(k / 15);
+          target = 8 + u * 15;
+        }
+        result.countdownText = `(${target - elapsed}s to next unit)`;
+      }
+    } else if (billingRule === "full_block_required") {
+      if (meta.increment_minutes) {
+        const inc = meta.increment_minutes;
+        result.previewUnits = Math.floor(elapsed / inc);
+        const next = (result.previewUnits + 1) * inc;
+        result.countdownText = `(${Math.max(0, next - elapsed)}s to next unit — ${inc} min each)`;
+      } else {
+        const block = meta.block_minutes || 0;
+        result.previewUnits = block && elapsed >= block ? 1 : 0;
+        result.countdownText = block
+          ? `(${Math.max(0, block - elapsed)}s to 1 unit — need ${block} min)`
+          : "(full block required)";
+      }
+    } else if (billingRule === "time_band_select") {
+      const low = meta.time_band_min != null ? meta.time_band_min : 0;
+      const high = meta.time_band_max;
+      const inBand = minutesInBand(elapsed, low, high);
+      result.previewUnits = inBand ? 1 : 0;
+      const bandLabel = high != null ? `${low}–${high} min` : `${low}+ min`;
+      result.countdownText = inBand
+        ? `(band ${bandLabel} matches)`
+        : `(need ${bandLabel}, currently ${elapsed} min)`;
+    }
+  } else if (meta.timer_mode === "occurrence") {
+    result.previewUnits = meta.occurrence_count || 1;
+    result.countdownText = "(occurrence-based — timer optional)";
+  } else if (meta.timer_mode === "area") {
+    const area = meta.area_sq_cm || 0;
+    if (meta.increment_sq_cm && area > 0) {
+      result.previewUnits = Math.floor(area / meta.increment_sq_cm);
+    } else if (meta.area_threshold_sq_cm && area > 0) {
+      result.previewUnits = area >= meta.area_threshold_sq_cm ? 1 : 0;
+    } else if (area > 0) {
+      result.previewUnits = 1;
+    }
+    result.countdownText = "(area-based — enter sq cm)";
+  }
+
+  return result;
+}
+
+function usesDurationUnits(meta) {
+  return meta.timer_mode === "duration_units";
+}
+
+function cardNeedsArea(meta) {
+  return meta.timer_mode === "area";
+}
+
+function cardShowsTimer(meta) {
+  return meta.timer_mode === "duration_units" || meta.timer_mode === "duration_doc" || meta.timer_mode === "occurrence" || meta.timer_mode === "area";
+}
+
 function setStatus(message, type) {
   const elements = document.querySelectorAll('.run-status');
   const showMessage = type === "error";
@@ -127,84 +272,169 @@ function renderModifierPills(modifiers) {
   }).join("") + '</div>';
 }
 
+function renderBadges(card) {
+  const parts = [];
+  if (card.badge) {
+    parts.push(`<span class="badge-black">${escapeHtml(card.badge)}</span>`);
+  }
+  if (card.ai_verified) {
+    const confidence = card.ai_confidence != null ? ` ${card.ai_confidence}%` : "";
+    parts.push(`<span class="badge-ai-verified">✓ AI Verified${escapeHtml(confidence)}</span>`);
+  }
+  return parts.length ? `<div class="cpt-badges">${parts.join("")}</div>` : "";
+}
+
+function renderOverlapConflictSuggestion(s) {
+  const heading = s.heading || (s.conflict_with_cpt ? `Overlap with ${s.conflict_with_cpt}` : "Temporal overlap");
+  const conflictId = s.conflict_id || "";
+  return `<li class="suggestion-callout-item">
+      <div class="ncci-conflict-block">
+        <div class="ncci-conflict-heading">${escapeHtml(heading)}</div>
+        <p class="ncci-conflict-text">${escapeHtml(s.summary)}</p>
+        <div class="ncci-conflict-actions">
+          <button type="button" class="btn-glass btn-glass-muted" data-action="reject" data-conflict-id="${escapeHtml(conflictId)}">Reject</button>
+          <button type="button" class="btn-glass btn-glass-ok" data-action="approve" data-conflict-id="${escapeHtml(conflictId)}">Approve</button>
+        </div>
+      </div>
+    </li>`;
+}
+
+function renderConflictSuggestion(s) {
+  if (s.type === "temporal_overlap") {
+    return renderOverlapConflictSuggestion(s);
+  }
+  return renderNcciConflictSuggestion(s);
+}
+
+function renderNcciConflictSuggestion(s) {
+  const heading = s.heading || (s.conflict_with_cpt ? `Conflict with ${s.conflict_with_cpt}` : "NCCI bundle conflict");
+  const mods = s.modifiers && s.modifiers.length ? s.modifiers : [];
+  const conflictId = s.conflict_id || "";
+  const canApprove = mods.length > 0;
+  const modButtons = canApprove
+    ? mods.map(function (m) {
+        return `<button type="button" class="btn-glass btn-glass-mod" data-action="approve" data-modifier="${escapeHtml(m)}" data-conflict-id="${escapeHtml(conflictId)}">${escapeHtml(m)}</button>`;
+      }).join("") +
+      `<input type="text" class="custom-modifier-input glass-input" placeholder="Custom" maxlength="4">` +
+      `<button type="button" class="btn-glass btn-glass-ok custom-modifier-apply" data-action="approve" data-conflict-id="${escapeHtml(conflictId)}">Apply</button>`
+    : "";
+  return `<li class="suggestion-callout-item">
+      <div class="ncci-conflict-block">
+        <div class="ncci-conflict-heading">${escapeHtml(heading)}</div>
+        <p class="ncci-conflict-text">${escapeHtml(s.summary)}</p>
+        <div class="ncci-conflict-actions">
+          <button type="button" class="btn-glass btn-glass-muted" data-action="reject" data-conflict-id="${escapeHtml(conflictId)}">Reject</button>
+          ${modButtons}
+        </div>
+      </div>
+    </li>`;
+}
+
+function renderSuggestionItem(s) {
+  if (s.type === "transcript_weak") {
+    return `<li class="suggestion-callout-item">
+        <div class="ai-suggestion-callout ai-suggestion-callout--warning">
+          <div class="ai-suggestion-callout__header">
+            <span class="ai-suggestion-badge">AI Insight</span>
+          </div>
+          <p class="ai-suggestion-callout__text">${escapeHtml(s.summary)}</p>
+          <button type="button" class="btn-glass btn-glass-warn" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || "")}">Accept &amp; Remove</button>
+        </div>
+      </li>`;
+  }
+  if (s.type === "ai_suggested") {
+    return `<li class="suggestion-callout-item">
+        <div class="ai-suggestion-callout ai-suggestion-callout--suggest">
+          <div class="ai-suggestion-callout__header">
+            <span class="ai-suggestion-badge">✨ AI Suggested</span>
+          </div>
+          <p class="ai-suggestion-callout__text">${escapeHtml(s.summary)}</p>
+          <div class="ai-suggestion-callout__actions">
+            <button type="button" class="btn-glass btn-glass-muted" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || "")}">Reject</button>
+            <button type="button" class="btn-glass btn-glass-ok" data-action="approve" data-conflict-id="${escapeHtml(s.conflict_id || "")}">Approve</button>
+          </div>
+        </div>
+      </li>`;
+  }
+  return `<li class="suggestion-advisory-item">${escapeHtml(s.summary)}</li>`;
+}
+
 function renderCptCard(card) {
   const review = card.card_style === "review" ? " review" : card.card_style === "ai_suggested" ? " ai-suggested" : "";
-  const cardInlineStyle = card.card_style === "ai_suggested" ? 'style="opacity: 0.85; background: #f9fafb; border: 2px dashed #9ca3af;"' : "";
-  const badge = card.badge ? `<span class="badge-black">${escapeHtml(card.badge)}</span>` : "";
+  const badges = renderBadges(card);
   const conflict = card.conflict_message
     ? `<div class="conflict-text">${escapeHtml(card.conflict_message)}</div>`
     : "";
   const modifierPills = renderModifierPills(card.applied_modifiers);
   const isEnded = card.duration_display && card.duration_display !== "—";
-  const extraSuggestions = card.suggestions
-    .filter(function (s) {
-      if (s.type === "ncci_bundling" || s.type === "temporal_overlap") return false;
-      if (isEnded && (s.type === "rule_applicability" || s.type === "awaiting_end")) return false;
-      return true;
-    })
-    .map(s => {
-      if (s.type === "transcript_weak") {
-          return `<li style="display: flex; flex-direction: column; gap: 4px;">
-              <span>${escapeHtml(s.summary)}</span>
-              <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="align-self: flex-start; margin-top: 4px; padding: 4px 8px; font-size: 12px; background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">✕ Accept AI Suggestion & Remove</button>
-          </li>`;
-      }
-      if (s.type === "ai_suggested") {
-          return `<li style="display: flex; flex-direction: column; gap: 8px;">
-              <span>${escapeHtml(s.summary)}</span>
-              <div style="display: flex; gap: 8px;">
-                  <button class="btn-text reject" data-action="reject" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">✕ Reject</button>
-                  <button class="btn-text approve" data-action="approve" data-conflict-id="${escapeHtml(s.conflict_id || '')}" style="padding: 4px 12px; font-size: 12px; background: rgba(255,255,255,0.72); color: #1e293b; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">✓ Approve</button>
-              </div>
-          </li>`;
-      }
-      return `<li>${escapeHtml(s.summary)}</li>`;
-    }).join("");
-  const suggestionList = extraSuggestions
-    ? `<ul class="suggestion-list">${extraSuggestions}</ul>` : "";
-  const actions = (card.actions.approve_enabled || card.actions.reject_enabled)
-    ? `<div class="card-actions" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px;">
-            ${card.actions.reject_enabled ? '<button class="btn-text reject" data-action="reject">✕ Reject</button>' : ""}
+  const ncciSuggestions = card.suggestions.filter(function (s) {
+    return s.type === "ncci_bundling" || s.type === "temporal_overlap";
+  });
+  const otherSuggestions = card.suggestions.filter(function (s) {
+    if (s.type === "ncci_bundling" || s.type === "temporal_overlap") return false;
+    if (isEnded && (s.type === "rule_applicability" || s.type === "awaiting_end")) return false;
+    return true;
+  });
+  const ncciList = ncciSuggestions.map(renderConflictSuggestion).join("");
+  const extraSuggestions = otherSuggestions.map(renderSuggestionItem).join("");
+  const suggestionList = (ncciList || extraSuggestions)
+    ? `<ul class="suggestion-list">${ncciList}${extraSuggestions}</ul>` : "";
+  const hasPerConflictActions = ncciSuggestions.length > 0;
+  const actions = !hasPerConflictActions && (card.actions.approve_enabled || card.actions.reject_enabled)
+    ? `<div class="card-actions" style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px;">
+            ${card.actions.reject_enabled ? '<button type="button" class="btn-glass btn-glass-muted" data-action="reject">Reject</button>' : ""}
             ${card.actions.approve_enabled ? `
-              <span style="font-size: 13px; font-weight: 500;">Resolve with:</span>
-              ${(card.modifiers_suggested && card.modifiers_suggested.length > 0 ? card.modifiers_suggested : ['59', 'XE', 'XP', 'XS', 'XU']).map(m => `<button class="btn-text modifier-btn" data-action="approve" data-modifier="${escapeHtml(m)}">${escapeHtml(m)}</button>`).join('\n              ')}
-              <input type="text" class="custom-modifier-input" placeholder="Custom..." style="width: 70px; padding: 2px 6px; font-size: 13px;">
-              <button class="btn-text custom-modifier-apply" data-action="approve">Apply</button>
+              <span style="font-size: 11px; font-weight: 600; color: #64748b;">Resolve with</span>
+              ${(card.modifiers_suggested && card.modifiers_suggested.length > 0 ? card.modifiers_suggested : ['59', 'XE', 'XP', 'XS', 'XU']).map(m => `<button type="button" class="btn-glass btn-glass-mod" data-action="approve" data-modifier="${escapeHtml(m)}">${escapeHtml(m)}</button>`).join('\n              ')}
+              <input type="text" class="custom-modifier-input glass-input" placeholder="Custom" maxlength="4">
+              <button type="button" class="btn-glass btn-glass-ok custom-modifier-apply" data-action="approve">Apply</button>
             ` : ""}
            </div>` : "";
-  const unitsHtml = card.is_timed
-    ? `Unit(s): <strong><span id="units-display-${escapeHtml(card.cpt_code)}">${card.units_display}</span></strong>`
-    : `<del>Unit(s)</del> <span style="font-size: 0.85em; color: var(--muted);">(Must update manually: not a timed code)</span>`;
+  const timerMeta = cardTimerMeta(card);
+  const timerMetaJson = escapeHtml(JSON.stringify(timerMeta));
+  const autoUnits = timerMeta.auto_units;
+  const unitsHtml = autoUnits
+    ? `Unit(s): <strong><span id="units-display-${escapeHtml(card.cpt_code)}" data-live-units="${card.units_display}">${card.units_display}</span></strong>`
+    : `<del>Unit(s)</del> <span style="font-size: 0.85em; color: var(--muted);">(Manual entry at finalize)</span>`;
+
+  const areaInputHtml = cardNeedsArea(timerMeta)
+    ? `<div class="area-input-row" style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+         <label style="font-size: 12px; font-weight: 600; color: #475569;">Area (sq cm):</label>
+         <input type="number" class="area-sqcm-input" data-cpt="${escapeHtml(card.cpt_code)}" value="${timerMeta.area_sq_cm || ""}" min="0" step="0.1" placeholder="sq cm" style="width: 90px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 8px;">
+       </div>`
+    : "";
 
   let startDisabled = "";
   let startTooltip = "";
   if (card.duration_display !== "—") {
-    if (card.status === "manual") {
-      startDisabled = 'style="display: none;"';
-    } else {
-      startDisabled = "disabled";
-      startTooltip = 'title="Timer already recorded"';
-    }
+    startDisabled = "disabled";
+    startTooltip = 'title="Timer already recorded"';
   } else {
     startDisabled = 'style="background: rgba(255,255,255,0.72); color: #1e293b; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 8px; box-shadow: 0 6px 14px rgba(51,65,85,0.08);"';
   }
 
+  const showTimer = cardShowsTimer(timerMeta) && card.duration_display === "—";
+
+  const removeConflictId = "therapist_remove_" + card.cpt_code;
   return `
-        <div class="cpt-card${review}" data-cpt="${escapeHtml(card.cpt_code)}" data-is-timed="${card.is_timed}"${card.conflict_id ? ' data-conflict-id="' + escapeHtml(card.conflict_id) + '"' : ""} ${cardInlineStyle}>
-          <div class="card-title" style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div class="cpt-card${review}" data-cpt="${escapeHtml(card.cpt_code)}" data-billing-rule="${escapeHtml(card.billing_rule || "")}" data-timer-meta="${timerMetaJson}"${card.conflict_id ? ' data-conflict-id="' + escapeHtml(card.conflict_id) + '"' : ""}>
+          <div class="card-title" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
             <span>${escapeHtml(card.cpt_code)} — ${escapeHtml(card.short_label)}</span>
-            ${(card.duration_display === "—") ? `
+            <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <button type="button" class="btn-glass btn-glass-danger" data-action="remove-cpt" data-conflict-id="${escapeHtml(removeConflictId)}" title="Remove this CPT code">Remove</button>
+            ${showTimer ? `
             <div class="timer-actions" style="display: flex; align-items: center; gap: 8px;">
               <span class="timer-countdown" style="font-size: 12px; color: var(--muted); display: none;"></span>
               <span class="timer-display" style="font-family: monospace; font-size: 16px; font-weight: 700; color: #334155; display: none;">00:00</span>
               <button class="btn-demo" data-action="start-timer" ${startDisabled} ${startTooltip}>Start</button>
               <button class="btn-demo" data-action="pause-timer" style="background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 8px; display: none; cursor: pointer; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">Pause</button>
               <button class="btn-demo" data-action="stop-timer" style="background: rgba(255,255,255,0.72); color: #334155; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 8px; display: none; cursor: pointer; box-shadow: 0 6px 14px rgba(51,65,85,0.08);">Stop</button>
-            </div>` : `<span class="edit-icon">✎</span>`}
+            </div>` : (card.duration_display !== "—" ? `<span class="edit-icon">✎</span>` : "")}
+            </div>
           </div>
           <div class="card-meta">${unitsHtml} &nbsp;&nbsp; Duration: <strong><span id="duration-display-${escapeHtml(card.cpt_code)}">${escapeHtml(card.duration_display)}</span></strong></div>
-          
-          ${badge}
+          ${areaInputHtml}
+          ${badges}
           ${conflict}
           ${modifierPills}
           ${suggestionList}
@@ -277,9 +507,12 @@ function renderUi(ui, onModifierAction) {
 
   content.querySelectorAll("[data-action]").forEach(btn => {
     btn.addEventListener("click", async (e) => {
-      const card = e.target.closest(".cpt-card");
+      e.preventDefault();
+      e.stopPropagation();
+      const actionBtn = e.currentTarget;
+      const card = actionBtn.closest(".cpt-card");
       const cpt = card?.dataset.cpt;
-      const action = e.target.dataset.action;
+      const action = actionBtn.dataset.action;
 
       if (action === "start-timer") {
         try {
@@ -318,16 +551,22 @@ function renderUi(ui, onModifierAction) {
         return;
       }
 
-      const conflictId = e.target.dataset.conflictId || card?.dataset.conflictId;
+      const conflictId = actionBtn.dataset.conflictId || card?.dataset.conflictId || "";
 
-      let modifier = e.target.dataset.modifier || null;
-      if (e.target.classList.contains("custom-modifier-apply")) {
-        const input = card.querySelector(".custom-modifier-input");
+      let modifier = actionBtn.dataset.modifier || null;
+      if (actionBtn.classList.contains("custom-modifier-apply")) {
+        const scope = actionBtn.closest(".ncci-conflict-actions, .card-actions, .cpt-card") || card;
+        const input = scope.querySelector(".custom-modifier-input");
         modifier = input ? input.value.trim() : null;
         if (!modifier) {
           setStatus("Please enter a valid modifier code.", "error");
           return;
         }
+      }
+
+      if (!action) {
+        setStatus("No action available for this control.", "error");
+        return;
       }
 
       await handleAction(cpt, action, conflictId, modifier);
@@ -339,6 +578,23 @@ function renderUi(ui, onModifierAction) {
       updateTimerUI(cptKey, timer.secondsElapsed);
     }
   }
+
+  content.querySelectorAll(".area-sqcm-input").forEach(function (input) {
+    input.addEventListener("change", async function () {
+      const cptCode = input.getAttribute("data-cpt");
+      const area = parseFloat(input.value, 10);
+      if (!cptCode || Number.isNaN(area) || area < 0) return;
+      await ensureLiveSession();
+      try {
+        handleLiveResponse(await liveApi("/live/session/" + liveSessionId + "/cpt/area", "POST", {
+          cpt_code: cptCode,
+          area_sq_cm: area,
+        }));
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  });
 }
 
 let liveSessionId = null;
@@ -407,13 +663,14 @@ function renderFinalizedBilling(finalize, ui) {
   const reviewContent = document.getElementById("review-content");
   const rows = finalize.lines.map(function (line) {
     let unitsHtml = `<span class="unit-badge">${line.units}</span>`;
-    if (line.is_timed === false) {
+    if (needsManualUnitsInput(line.billing_rule)) {
       unitsHtml = `<input type="number" class="manual-unit-input" data-cpt="${escapeHtml(line.cpt_code)}" value="${line.units}" min="0" style="width: 60px; padding: 4px; border: 2px solid var(--color-orange); border-radius: 4px; font-weight: bold; text-align: center;">`;
     }
     return `
-          <tr data-summary-cpt="${escapeHtml(line.cpt_code)}" ${line.is_timed === false ? 'style="background-color: #fffbeb;"' : ''}>
+          <tr data-summary-cpt="${escapeHtml(line.cpt_code)}" ${needsManualUnitsInput(line.billing_rule) ? 'style="background-color: #fffbeb;"' : ''}>
             <td><a href="#" class="cpt-code-link" onclick="return false;">${escapeHtml(line.cpt_code)}</a></td>
             <td>${escapeHtml(line.description)}</td>
+            <td>${escapeHtml(billingRuleLabel(line, ui))}</td>
             <td>${(line.applied_modifiers && line.applied_modifiers.length) ? escapeHtml(line.applied_modifiers.join(", ")) : "None"}</td>
             <td data-summary-units-cell>${unitsHtml}</td>
             <td>${escapeHtml(line.duration_display)}</td>
@@ -426,6 +683,7 @@ function renderFinalizedBilling(finalize, ui) {
           <tr class="rejected-row" style="opacity: 0.6; background-color: var(--bg-alt);">
             <td><span class="cpt-code-link">${escapeHtml(line.cpt_code)}</span></td>
             <td>${escapeHtml(line.description)} <strong style="color: var(--color-red);">(Rejected/Removed)</strong></td>
+            <td>${escapeHtml(billingRuleLabel(line, ui))}</td>
             <td>${(line.applied_modifiers && line.applied_modifiers.length) ? escapeHtml(line.applied_modifiers.join(", ")) : "None"}</td>
             <td><span class="unit-badge" style="background: #999;">0</span></td>
             <td>${escapeHtml(line.duration_display)}</td>
@@ -443,6 +701,7 @@ function renderFinalizedBilling(finalize, ui) {
                 <tr>
                   <th>Code</th>
                   <th>Description</th>
+                  <th>Billing Rule</th>
                   <th>Modifiers</th>
                   <th>Units</th>
                   <th>Duration</th>
@@ -482,6 +741,7 @@ function renderFinalizedBilling(finalize, ui) {
                 <tr>
                   <th>Code</th>
                   <th>Description</th>
+                  <th>Billing Rule</th>
                   <th>Modifiers</th>
                   <th>Units</th>
                   <th>Duration</th>
@@ -491,7 +751,7 @@ function renderFinalizedBilling(finalize, ui) {
               <tbody>
                 ${rows}
                 <tr class="total-row">
-                  <td colspan="3"><strong>Total</strong></td>
+                  <td colspan="4"><strong>Total</strong></td>
                   <td><span class="unit-badge" id="finalize-table-total-units">${finalize.billable_units_total}</span></td>
                   <td colspan="2">${escapeHtml(finalize.total_duration_display)}</td>
                 </tr>
@@ -529,7 +789,7 @@ function renderFinalizedBilling(finalize, ui) {
     input.addEventListener("input", function() {
       let total = 0;
       finalize.lines.forEach(line => {
-        if (line.is_timed !== false) {
+        if (!needsManualUnitsInput(line.billing_rule)) {
            total += line.units;
         }
       });
@@ -651,11 +911,28 @@ function syncLiveCptInputs(openCptCode) {
   }
 }
 
+function clearCptTimer(cpt) {
+  if (!cpt || !window.activeCptTimers || !window.activeCptTimers[cpt]) return;
+  clearInterval(window.activeCptTimers[cpt].intervalId);
+  delete window.activeCptTimers[cpt];
+}
+
 async function handleAction(cpt, action, conflictId, modifier) {
+  const isRemove = action === "reject" || action === "remove-cpt";
+  if (isRemove && !conflictId && cpt) {
+    conflictId = "therapist_remove_" + cpt;
+  }
+
   if (conflictId) {
     await ensureLiveSession();
     try {
-      const payload = { conflict_id: conflictId, action: action };
+      if (isRemove) {
+        clearCptTimer(cpt);
+      }
+      const payload = {
+        conflict_id: conflictId,
+        action: isRemove ? "reject" : action,
+      };
       if (modifier) {
         payload.modifier = modifier;
       }
@@ -664,10 +941,8 @@ async function handleAction(cpt, action, conflictId, modifier) {
     } catch (err) {
       setStatus(err.message, "error");
     }
-  } else {
-    if (action !== "start-timer" && action !== "stop-timer") {
-      alert(`${action === "approve" ? "Approved" : "Rejected"} review for CPT ${cpt} (prototype only).`);
-    }
+  } else if (action !== "start-timer" && action !== "stop-timer" && action !== "pause-timer") {
+    setStatus(`No action available for CPT ${cpt}.`, "error");
   }
 }
 
@@ -919,48 +1194,47 @@ function updateTimerUI(cpt, secondsElapsed) {
   const countdown = card.querySelector('.timer-countdown');
   const durationText = card.querySelector('#duration-display-' + cpt);
 
-  const isTimed = card.getAttribute("data-is-timed") === "true";
+  let meta;
+  try {
+    meta = JSON.parse(card.getAttribute("data-timer-meta") || "{}");
+  } catch (e) {
+    meta = defaultTimerMeta({ billing_rule: card.getAttribute("data-billing-rule") });
+  }
+  const billingRule = card.getAttribute("data-billing-rule") || "";
+  const state = computeLiveTimerState(meta, secondsElapsed, billingRule);
+
   if (btnStart) btnStart.style.display = 'none';
   if (btnStop) btnStop.style.display = 'inline-block';
   if (btnPause) {
     btnPause.style.display = 'inline-block';
     if (window.activeCptTimers && window.activeCptTimers[cpt] && window.activeCptTimers[cpt].isPaused) {
       btnPause.textContent = "Resume";
-      btnPause.style.background = "#10b981"; // green
+      btnPause.style.background = "#10b981";
     } else {
       btnPause.textContent = "Pause";
-      btnPause.style.background = "#f59e0b"; // orange
+      btnPause.style.background = "#f59e0b";
     }
   }
   if (display) display.style.display = 'inline-block';
-  if (countdown && isTimed) countdown.style.display = 'inline-block';
+  if (countdown && state.showCountdown) countdown.style.display = 'inline-block';
 
   card.style.borderColor = '#2563eb';
   card.style.boxShadow = '0 0 0 2px #bfdbfe';
 
-  if (display) display.textContent = formatTimerDisplay(secondsElapsed);
-  if (durationText) durationText.textContent = secondsElapsed + " min (running)";
+  if (display) display.textContent = state.displayMmSs;
+  if (durationText) durationText.textContent = state.durationLabel;
 
-  if (countdown && isTimed) {
-    let target = 8;
-    let units = 0;
-    if (secondsElapsed >= 8) {
-      let k = secondsElapsed - 8;
-      units = 1 + Math.floor(k / 15);
-      target = 8 + units * 15;
-    }
-    let remaining = target - secondsElapsed;
-    countdown.textContent = `(${remaining}s to next unit)`;
+  if (countdown && state.countdownText) {
+    countdown.textContent = state.countdownText;
+  }
 
-    const unitsText = card.querySelector('#units-display-' + escapeHtml(cpt));
-    if (unitsText && unitsText.textContent !== "Manual") {
-      const oldUnits = parseInt(unitsText.getAttribute("data-live-units") || "0", 10);
-      unitsText.textContent = units;
-      unitsText.setAttribute("data-live-units", units);
-
-      if (oldUnits !== units) {
-        recalculateTotalLiveUnits();
-      }
+  const unitsText = card.querySelector('#units-display-' + escapeHtml(cpt));
+  if (unitsText && meta.auto_units) {
+    const oldUnits = parseInt(unitsText.getAttribute("data-live-units") || "0", 10);
+    unitsText.textContent = state.previewUnits;
+    unitsText.setAttribute("data-live-units", state.previewUnits);
+    if (oldUnits !== state.previewUnits) {
+      recalculateTotalLiveUnits();
     }
   }
 }
@@ -968,11 +1242,18 @@ function updateTimerUI(cpt, secondsElapsed) {
 
 async function liveFinalize() {
   await ensureLiveSession();
-  
+
   if (lastLiveUi && lastLiveUi.cpt_cards) {
-    const incomplete = lastLiveUi.cpt_cards.find(c => c.duration_display === "—");
+    const incomplete = lastLiveUi.cpt_cards.find(function (c) {
+      if (c.duration_display !== "—") return false;
+      const meta = cardTimerMeta(c);
+      if (usesDurationUnits(meta)) return true;
+      if (cardNeedsArea(meta) && !(meta.area_sq_cm > 0)) return true;
+      if (meta.timer_mode === "occurrence") return true;
+      return false;
+    });
     if (incomplete) {
-      setStatus("Cannot finalize yet: Please stop all active timers and provide durations/units for all detected codes.", "error");
+      setStatus("Cannot finalize yet: complete all detected codes (duration, area, or occurrence).", "error");
       return;
     }
   }

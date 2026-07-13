@@ -37,6 +37,9 @@ Your task is to verify a billing summary by independently calculating expected b
 
 Additional rules:
 - Use ONLY the billing summary JSON provided. Never reference a therapy transcript or external session data.
+- Apply each line's exact billing_rule using the supplied rule-specific metadata.
+- Zero duration is valid for untimed and area-based rules.
+- Do not guess when required duration, area, or rule metadata is missing.
 - Compare your independently calculated expected_units against the summary_units supplied for each line.
 - Mark each line PASSED when expected_units equals summary_units; otherwise FAILED with concise reasoning.
 - Set overall_validation to FAILED if any line fails.
@@ -80,7 +83,9 @@ def _build_user_prompt(
             "cpt": line.cpt.strip(),
             "duration_minutes": line.duration_minutes,
             "summary_units": line.summary_units,
-            "is_timed": line.is_timed,
+            "billing_rule": line.billing_rule,
+            "occurrence_count": line.occurrence_count,
+            "area_sq_cm": line.area_sq_cm,
         }
         for line in lines
     ]
@@ -159,7 +164,11 @@ def _build_rows_from_llm(
     for line in lines:
         cpt = _normalize_cpt(line.cpt)
         gem = llm_by_cpt[cpt]
-        is_timed = line.is_timed if line.is_timed is not None else store.is_timed(cpt)
+        cpt_billing_rule = (
+            line.billing_rule
+            if line.billing_rule is not None
+            else store.billing_rule(cpt)
+        )
         duration_minutes = max(0, int(round(line.duration_minutes)))
         expected_units = int(round(float(gem.get("expected_units", 0))))
         summary_units = line.summary_units
@@ -185,7 +194,7 @@ def _build_rows_from_llm(
             SummaryValidateRow(
                 cpt=cpt,
                 duration_minutes=duration_minutes,
-                is_timed=is_timed,
+                billing_rule=cpt_billing_rule,
                 expected_units=expected_units,
                 summary_units=summary_units,
                 status="PASSED" if passed else "FAILED",

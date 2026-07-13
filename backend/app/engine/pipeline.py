@@ -11,8 +11,8 @@ from app.engine.duration import (
     segment_duration_details,
     session_duration_minutes,
 )
-from app.engine.eight_minute import calculate_units as calculate_units_cms
-from app.engine import ama_rule
+from app.engine.billing_dispatcher import calculate_all_units
+from app.engine.eight_minute import EIGHT_MINUTE_RULE
 from app.engine.human_summary import build_human_summary
 from app.engine.icd10 import (
     extract_icd_codes,
@@ -194,10 +194,7 @@ def evaluate_session(payload: BillingSessionInput, store: MetadataStore) -> Bill
     pending_cpts = ncci_pending_cpts | (icd_pending_cpts & active) | (overlap_cpts & active)
 
     active_segs = {cpt: segments_by_cpt[cpt] for cpt in active if cpt in segments_by_cpt}
-    if payload.billing_rule == "ama_rule_of_8":
-        unit_results = ama_rule.calculate_units(active_segs, store)
-    else:
-        unit_results = calculate_units_cms(active_segs, store)
+    unit_results = calculate_all_units(active_segs, store, payload.billing_rule)
 
     billable: list[BillableCode] = []
     for item in unit_results:
@@ -235,7 +232,7 @@ def evaluate_session(payload: BillingSessionInput, store: MetadataStore) -> Bill
                 duration_minutes_billed=item.minutes_billed,
                 units=after,
                 unit_calculation_method=item.method,
-                is_timed=item.method == "eight_minute_rule",
+                billing_rule=store.billing_rule(item.cpt_code),
                 sequences=item.sequences,
                 billing_status="pending_therapist_review" if is_pending else "confirmed",
                 pending_reasons=pending_reasons,
@@ -305,7 +302,7 @@ def evaluate_session(payload: BillingSessionInput, store: MetadataStore) -> Bill
         sum(
             segments_by_cpt[c].get("minutes_billed", 0)
             for c in active
-            if store.is_timed(c) and c in segments_by_cpt
+            if store.billing_rule(c) == EIGHT_MINUTE_RULE and c in segments_by_cpt
         ),
         2,
     )

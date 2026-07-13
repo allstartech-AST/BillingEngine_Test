@@ -23,7 +23,7 @@ class BillingSummaryLine(BaseModel):
     engine_units: int = Field(ge=0)
     modifier: str | None = None
     region: str = ""
-    is_timed: bool | None = None
+    billing_rule: str | None = None
 
 
 class LlmAuditRequest(BaseModel):
@@ -71,7 +71,7 @@ def _billing_summary_from_finalize(state, store) -> list[dict]:
                 "engine_units": line.units,
                 "modifier": _primary_modifier(line.applied_modifiers),
                 "region": line.region if line.region and line.region != "--" else "",
-                "is_timed": line.is_timed,
+                "billing_rule": line.billing_rule,
             }
         )
     return summary

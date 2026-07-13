@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.engine.eight_minute import EIGHT_MINUTE_RULE
 from app.engine.icd10 import _icd_in_crosswalk, resolve_ranked_icd
 from app.engine.loader import MetadataStore
 from app.engine.provisional_units import calculate_provisional_unit_maps
@@ -248,6 +249,7 @@ def build_ui_display(
                 provisional_units=provisional,
                 suggestions=suggestions,
                 sequences=list(seg.get("sequences", [])),
+                billing_rule=store.billing_rule(cpt),
             )
         )
 
@@ -341,7 +343,7 @@ def build_ui_display(
         for r in removed_codes
     ]
 
-    has_eight_minute = any(c.is_timed for c in billable_codes)
+    has_eight_minute = any(c.billing_rule == EIGHT_MINUTE_RULE for c in billable_codes)
 
     return UiDisplay(
         session_header=UiSessionHeader(

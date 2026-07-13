@@ -66,6 +66,7 @@ def lexical_hints_for_segment(
         return []
 
     from app.engine.transcript_medexa import validate_cpt_transcript_support
+    from app.engine.conflict_evaluation import codes_hard_rejected_if_added
 
     words = set(re.findall(r"\b[a-z0-9]+\b", segment.lower()))
     candidates: set[str] = set()
@@ -76,6 +77,8 @@ def lexical_hints_for_segment(
     seen: set[str] = set()
     for cpt in sorted(candidates):
         if cpt in existing_cpts or cpt not in store.medexa or cpt in seen:
+            continue
+        if codes_hard_rejected_if_added(existing_cpts, [cpt], store):
             continue
         seen.add(cpt)
         support = validate_cpt_transcript_support(cpt, segment, store)

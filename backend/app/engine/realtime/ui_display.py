@@ -1,5 +1,10 @@
 from datetime import datetime, timezone
 
+from app.engine.billing_rule_catalog import (
+    live_rule_meta,
+    rule_badge_label,
+)
+from app.engine.eight_minute import EIGHT_MINUTE_RULE
 from app.engine.icd10 import _icd_in_crosswalk
 from app.engine.loader import MetadataStore
 from app.engine.realtime.rules import icd_pending_for_cpt, unresolved_bypassable
@@ -13,6 +18,7 @@ from app.models.output import (
     BillingConflict,
     UiCptActions,
     UiCptCard,
+    UiCptTimerMeta,
     UiDisplay,
     UiIcdCard,
     UiRemovedCard,
@@ -37,7 +43,7 @@ _REMOVAL_LABELS = {
 
 from app.engine.ui_conflict_cards import (
     build_live_ncci_presentation,
-    primary_ncci_conflict,
+    ncci_conflicts_for_cpt,
 )
 
 
@@ -103,43 +109,59 @@ def _build_icd_card(state: LiveSessionState, store: MetadataStore) -> list[UiIcd
     ]
 
 
+def _timer_meta_for_row(row: LiveCptRow, state: LiveSessionState, store: MetadataStore) -> UiCptTimerMeta:
+    meta = live_rule_meta(row.cpt_code, store)
+    return UiCptTimerMeta(
+        timer_mode=meta.timer_mode,
+        block_minutes=meta.block_minutes,
+        increment_minutes=meta.increment_minutes,
+        time_band_min=meta.time_band_min,
+        time_band_max=meta.time_band_max,
+        area_threshold_sq_cm=meta.area_threshold_sq_cm,
+        increment_sq_cm=meta.increment_sq_cm,
+        session_billing_rule=state.billing_rule,
+        area_sq_cm=row.area_sq_cm,
+        occurrence_count=row.occurrence_count,
+        auto_units=meta.timer_mode in ("duration_units", "occurrence", "area"),
+    )
+
+
 def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDisplay:
     resolved = set(state.resolved_conflicts)
     open_conflicts = unresolved_bypassable(state.conflicts, resolved)
 
     completed_rows = [r for r in state.cpts if r.lifecycle == "completed"]
-    timed_completed = [r for r in completed_rows if r.is_timed]
+    timed_completed = [r for r in completed_rows if r.billing_rule == EIGHT_MINUTE_RULE]
     total_minutes = sum(r.duration_minutes_exact for r in completed_rows)
     pooled_minutes = sum(r.minutes_billed for r in timed_completed)
     units_total = sum(
         r.units
         for r in completed_rows
-        if r.is_timed and r.billing_status not in ("removed", "error")
+        if r.billing_status not in ("removed", "error")
     )
 
     cpt_cards: list[UiCptCard] = []
     for row in _visible_rows(state.cpts):
         description = store.description(row.cpt_code)
         short_label = _short_cpt_label(row.cpt_code, description, store)
+        rule_meta = live_rule_meta(row.cpt_code, store)
+        timer_meta = _timer_meta_for_row(row, state, store)
         is_pending = row.billing_status == "pending_therapist_review"
-        is_manual = not row.is_timed
-        is_detected = row.lifecycle == "detected"
+        is_detected = row.lifecycle in ("detected", "pending_start", "manual_billing")
         is_completed = row.lifecycle == "completed"
+        is_open = row.lifecycle in ("detected", "pending_start", "running", "paused", "manual_billing")
 
-        if is_detected:
-            units_display = 0
-            duration_display = "—"
-        elif is_manual and is_completed:
-            units_display = 0
-            duration_display = format_duration_mmss(row.duration_minutes_exact)
-        elif is_completed:
+        if is_completed:
             units_display = row.units
             duration_display = format_duration_mmss(row.duration_minutes_exact)
+        elif is_open:
+            units_display = row.units if row.units else 0
+            duration_display = "—"
         else:
             units_display = 0
             duration_display = "—"
 
-        ncci = primary_ncci_conflict(row.cpt_code, open_conflicts)
+        ncci_list = ncci_conflicts_for_cpt(row.cpt_code, open_conflicts)
         badge = None
         conflict_message = None
         conflict_with = None
@@ -162,10 +184,10 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                     conflict_id=f"ai_suggest_{row.cpt_code}"
                 )
             )
-        elif row.is_timed:
+        elif row.billing_rule == EIGHT_MINUTE_RULE:
             if state.billing_rule == "ama_rule_of_8":
-                badge = "AMA Rule of 8"
-                if is_detected:
+                badge = badge or "AMA Rule of 8"
+                if is_detected or row.lifecycle == "pending_start":
                     suggestions.append(
                         UiSuggestion(
                             type="rule_applicability",
@@ -185,8 +207,8 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                         )
                     )
             else:
-                badge = "8-Minute Rule"
-                if is_detected:
+                badge = badge or "8-Minute Rule"
+                if is_detected or row.lifecycle == "pending_start":
                     suggestions.append(
                         UiSuggestion(
                             type="rule_applicability",
@@ -205,11 +227,9 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                             ),
                         )
                     )
-        elif is_manual:
-            badge = "Manual / Occurrence"
-            summary = row.rule_message or (
-                "Units are calculated manually by the therapist (not under timed rule)."
-            )
+        elif not badge:
+            badge = rule_badge_label(rule_meta)
+            summary = row.rule_message or rule_badge_label(rule_meta)
             suggestions.append(
                 UiSuggestion(type="manual_billing", severity="advisory", summary=summary)
             )
@@ -223,28 +243,40 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                     type="transcript_weak",
                     severity="action_required",
                     summary=f"AI Detection: This CPT code may not be supported by the transcript. {getattr(row, 'ai_reasoning', '')}",
+                    conflict_id=f"ai_reject_{row.cpt_code}",
                 )
             )
 
-        if ncci and (is_pending or is_detected or is_completed):
+        ai_verified = False
+        ai_confidence = None
+        if row.lifecycle != "ai_suggested" and getattr(row, "ai_supported", None) is True:
+            ai_verified = True
+            ai_confidence = getattr(row, "ai_confidence", None)
+            if ai_confidence is None or ai_confidence <= 0:
+                ai_confidence = 100
+
+        if ncci_list and (is_pending or is_detected or is_completed):
             card_style = "review"
             verification = "pending_review"
-            presentation = build_live_ncci_presentation(
-                row.cpt_code,
-                ncci,
-                include_conflict=True,
-                existing_badge=badge,
-            )
-            if presentation:
-                conflict_with = presentation.conflict_with
-                conflict_message = presentation.conflict_message
-                conflict_id = presentation.conflict_id
-                modifiers = presentation.modifiers
-                actions = presentation.actions
-                if presentation.badge:
+            for ncci_conflict in ncci_list:
+                presentation = build_live_ncci_presentation(
+                    row.cpt_code,
+                    ncci_conflict,
+                    include_conflict=True,
+                    existing_badge=badge,
+                )
+                if not presentation:
+                    continue
+                if presentation.badge and not badge:
                     badge = presentation.badge
                 if presentation.suggestion:
                     suggestions.append(presentation.suggestion)
+                if len(ncci_list) == 1:
+                    conflict_with = presentation.conflict_with
+                    conflict_message = presentation.conflict_message
+                    conflict_id = presentation.conflict_id
+                    modifiers = presentation.modifiers
+                    actions = presentation.actions
 
         icd_guidance = row.icd_guidance
         if not icd_guidance and "icd_medical_necessity" in row.pending_reasons:
@@ -268,14 +300,6 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                 UiSuggestion(type="icd_medical_necessity", severity="advisory", summary=icd_guidance)
             )
 
-        if is_detected:
-            suggestions.append(
-                UiSuggestion(
-                    type="cpt_detected",
-                    severity="action_required",
-                    summary="New code detected in transcript. Click start when action begins.",
-                )
-            )
         elif row.lifecycle == "running":
             suggestions.append(
                 UiSuggestion(
@@ -302,7 +326,9 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                 duration_minutes_exact=row.duration_minutes_exact,
                 verification_status=verification,  # type: ignore[arg-type]
                 card_style=card_style,  # type: ignore[arg-type]
-                badge=badge if not (is_manual and is_completed and badge == "Manual / Occurrence") else "Manual Units",
+                badge=badge or rule_badge_label(rule_meta),
+                ai_verified=ai_verified,
+                ai_confidence=ai_confidence,
                 conflict_message=conflict_message,
                 conflict_with_cpt=conflict_with,
                 conflict_id=conflict_id,
@@ -310,10 +336,11 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
                 actions=actions,
                 suggestions=suggestions,
                 sequences=[row.sequence],
-                is_timed=row.is_timed,
+                billing_rule=row.billing_rule,
                 applied_modifiers=row.applied_modifiers,
                 is_addon=is_addon,
                 parent_cpt_code=parent_cpt_code,
+                timer_meta=timer_meta,
             )
         )
 
@@ -330,7 +357,9 @@ def build_live_ui_display(state: LiveSessionState, store: MetadataStore) -> UiDi
         if r.lifecycle == "removed"
     ]
 
-    has_eight_minute = any(r.is_timed for r in state.cpts if r.lifecycle != "removed")
+    has_eight_minute = any(
+        r.billing_rule == EIGHT_MINUTE_RULE for r in state.cpts if r.lifecycle != "removed"
+    )
 
     pool_note = ""
 

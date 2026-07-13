@@ -12,12 +12,19 @@ def primary_ncci_conflict(
     cpt: str,
     conflicts: list[BillingConflict],
 ) -> BillingConflict | None:
-    for conflict in conflicts:
-        if conflict.conflict_type != "bypassable_bundle":
-            continue
-        if cpt in conflict.codes:
-            return conflict
-    return None
+    matches = ncci_conflicts_for_cpt(cpt, conflicts)
+    return matches[0] if matches else None
+
+
+def ncci_conflicts_for_cpt(
+    cpt: str,
+    conflicts: list[BillingConflict],
+) -> list[BillingConflict]:
+    return [
+        conflict
+        for conflict in conflicts
+        if conflict.conflict_type == "bypassable_bundle" and cpt in conflict.codes
+    ]
 
 
 def overlap_conflict(
@@ -117,7 +124,7 @@ def build_live_ncci_presentation(
     indicator = ncci.modifier_indicator or "1"
     modifiers: list[str] = []
     conflict_message: str | None = None
-    conflict_id: str | None = None
+    conflict_id = ncci.conflict_id
     badge: str | None = None
 
     if applies_here:
@@ -136,7 +143,6 @@ def build_live_ncci_presentation(
                 f"NCCI bundle with Column 1 code {conflict_with} (modifier indicator {indicator}). "
                 f"If this was a distinct separate service, apply {labels} to {cpt}."
             )
-        conflict_id = ncci.conflict_id
         actions = UiCptActions(approve_enabled=True, reject_enabled=True)
     else:
         badge = existing_badge or "Review Required"
@@ -145,13 +151,15 @@ def build_live_ncci_presentation(
             f"NCCI bundle with {conflict_with} (modifier indicator {indicator}). "
             f"Please resolve this conflict on the Column 2 code ({col2})."
         )
-        actions = UiCptActions()
+        actions = UiCptActions(reject_enabled=True)
 
     suggestion = UiSuggestion(
         type="ncci_bundling",
         severity="action_required",
         summary=conflict_message or "",
         conflict_id=conflict_id,
+        conflict_with_cpt=conflict_with,
+        heading=f"Conflict with {conflict_with}" if conflict_with else "NCCI bundle conflict",
         modifiers=modifiers,
     )
     return NcciPresentation(
@@ -178,6 +186,8 @@ def build_overlap_presentation(
         severity="action_required",
         summary=overlap.issue,
         conflict_id=conflict_id,
+        conflict_with_cpt=conflict_with,
+        heading=f"Overlap with {conflict_with}" if conflict_with else "Temporal overlap",
     )
     return NcciPresentation(
         badge="Review Required",

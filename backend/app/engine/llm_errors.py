@@ -40,16 +40,37 @@ class LlmAuditError(Exception):
 
 
 _RETRY_AFTER_RE = re.compile(r"retry after ([0-9.]+)", re.IGNORECASE)
+_TRY_AGAIN_IN_RE = re.compile(r"try again in ([0-9.]+)\s*s", re.IGNORECASE)
 
 
 def extract_retry_after(text: str) -> float | None:
-    match = _RETRY_AFTER_RE.search(text)
-    if not match:
-        return None
-    try:
-        return float(match.group(1))
-    except ValueError:
-        return None
+    for pattern in (_RETRY_AFTER_RE, _TRY_AGAIN_IN_RE):
+        match = pattern.search(text)
+        if not match:
+            continue
+        try:
+            return float(match.group(1))
+        except ValueError:
+            continue
+    return None
+
+
+def retry_after_from_exception(exc: BaseException) -> float | None:
+    retry_after = extract_retry_after(str(exc))
+    if retry_after is not None:
+        return retry_after
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            header_value = headers.get("retry-after")
+            if header_value:
+                try:
+                    return float(header_value)
+                except ValueError:
+                    pass
+    return None
 
 
 _extract_retry_after = extract_retry_after

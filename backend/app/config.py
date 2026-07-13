@@ -76,7 +76,13 @@ LLM_SUGGEST_MIN_DELTA_CHARS = _env_int("LLM_SUGGEST_MIN_DELTA_CHARS", 150)
 LLM_SUGGEST_MAX_DELTA_CHARS = _env_int("LLM_SUGGEST_MAX_DELTA_CHARS", 3000)
 
 # Live AI enrichment scheduling (Phase 5 — debounce + skip-if-busy).
-LLM_ENRICHMENT_DEBOUNCE_SECONDS = _env_float("LLM_ENRICHMENT_DEBOUNCE_SECONDS", 3.0)
+LLM_ENRICHMENT_DEBOUNCE_SECONDS = _env_float("LLM_ENRICHMENT_DEBOUNCE_SECONDS", 2.0)
+
+# Minimum seconds between consecutive LLM HTTP requests (gap after each completes).
+LLM_REQUEST_INTERVAL_SECONDS = _env_float("LLM_REQUEST_INTERVAL_SECONDS", 3.0)
+
+# Groq free-tier TPM (~6000/min) needs wider spacing for large billing prompts.
+LLM_GROQ_MIN_INTERVAL_SECONDS = _env_float("LLM_GROQ_MIN_INTERVAL_SECONDS", 25.0)
 
 
 DATA_DIR = PROJECT_ROOT / "data"
@@ -89,6 +95,7 @@ BILLING_FILES = {
     "ptp": BILLING_DIR / "cpt_ptp_info.json",
     "mue": BILLING_DIR / "cpt_mue_info.json",
     "aoc": BILLING_DIR / "cpt_aoc_info.json",
+    "categories": BILLING_DIR / "pt_ot_slp_billing_categories.json",
 }
 
 MEDEXA_FILE = MEDEXA_DIR / "medexa_cpt_lookup.json"

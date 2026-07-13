@@ -11,6 +11,8 @@ segment windows, so overlap detection is not applicable on the live path.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from app.engine.aoc import validate_addon_codes
 from app.engine.loader import MetadataStore
 from app.engine.mue import check_mue_zero
@@ -80,6 +82,22 @@ def evaluate_cpt_conflicts(
         issues.append(
             Issue(severity="error", code=record.cpt_code, message=record.details)
         )
-    issues.extend(mue_issues)
-
     return billing_conflicts, issues, hard_removed
+
+
+def codes_hard_rejected_if_added(
+    active_cpts: set[str],
+    candidates: Iterable[str],
+    store: MetadataStore,
+) -> dict[str, str]:
+    """Map each candidate CPT to a rejection reason if it would be hard-removed."""
+    rejected: dict[str, str] = {}
+    for candidate in candidates:
+        code = (candidate or "").strip()
+        if not code or code in active_cpts:
+            continue
+        _, issues, hard_removed = evaluate_cpt_conflicts(active_cpts | {code}, store)
+        if code in hard_removed:
+            message = next((issue.message for issue in issues if issue.code == code), None)
+            rejected[code] = message or "Hard billing conflict with existing session codes."
+    return rejected

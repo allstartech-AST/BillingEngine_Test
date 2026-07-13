@@ -20,6 +20,25 @@
     };
   }
 
+  function isEightMinuteCptRule(cptBillingRule) {
+    return cptBillingRule === "8_minute_rule";
+  }
+
+  function ruleTypeLabel(cptBillingRule, cptBillingRuleLabel) {
+    if (cptBillingRuleLabel) {
+      return cptBillingRuleLabel;
+    }
+    if (cptBillingRule === "8_minute_rule") {
+      return billingRule === "ama_rule_of_8" ? "AMA Rule of 8" : "8-Minute Rule";
+    }
+    if (!cptBillingRule) {
+      return "Unset";
+    }
+    return String(cptBillingRule).replace(/_/g, " ").replace(/\b\w/g, function (c) {
+      return c.toUpperCase();
+    });
+  }
+
   function parseDurationToMinutes(display) {
     if (!display || display === "—" || display === "flat" || display === "Manual") {
       return 0;
@@ -106,6 +125,16 @@
     });
   }
 
+  function finalizeRuleLabelForCpt(cpt) {
+    if (!lastFinalize || !lastFinalize.lines) {
+      return null;
+    }
+    var match = lastFinalize.lines.find(function (line) {
+      return line.cpt_code === cpt;
+    });
+    return match ? match.billing_rule_label : null;
+  }
+
   function renderIdleState(finalize, ui) {
     lastFinalize = finalize;
     lastUi = ui;
@@ -154,7 +183,7 @@
         var statusHtml = failed
           ? "<span class=\"inline-flex items-center gap-1 text-[10px] font-bold text-red-600\">" + warningIcon() + " FAILED</span>"
           : "<span class=\"text-[10px] font-bold text-emerald-600\">PASSED</span>";
-        var timedLabel = row.is_timed ? "Timed" : "Untimed";
+        var timedLabel = ruleTypeLabel(row.billing_rule, finalizeRuleLabelForCpt(row.cpt));
 
         return (
           "<tr class=\"" + rowClass + "\">" +
@@ -212,7 +241,7 @@
     return (finalize.lines || []).map(function (line) {
       var duration = parseDurationToMinutes(line.duration_display);
       var summaryUnits = line.units;
-      if (line.is_timed === false) {
+      if (!isEightMinuteCptRule(line.billing_rule)) {
         var manualInput = document.querySelector(
           '.manual-unit-input[data-cpt="' + line.cpt_code + '"]'
         );
@@ -224,7 +253,7 @@
         cpt: line.cpt_code,
         duration_minutes: duration,
         summary_units: summaryUnits,
-        is_timed: line.is_timed !== false,
+        billing_rule: line.billing_rule || null,
       };
     });
   }

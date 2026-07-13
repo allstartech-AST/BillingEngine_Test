@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from app.engine.llm_errors import extract_retry_after
+from app.engine.llm_errors import retry_after_from_exception
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def quota_on_cooldown() -> bool:
 
 def mark_quota_exhausted(exc: Exception) -> None:
     global _quota_cooldown_until
-    retry_after = extract_retry_after(str(exc)) or 60.0
+    retry_after = retry_after_from_exception(exc) or 60.0
     _quota_cooldown_until = time.monotonic() + retry_after
     logger.warning(
         "OpenAI quota/rate limit hit; pausing AI enrichment for %.0fs: %s",

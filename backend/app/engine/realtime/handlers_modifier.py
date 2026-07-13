@@ -1,4 +1,5 @@
 
+from app.engine.billing_rule_catalog import live_rule_meta, rule_detect_message
 from app.engine.loader import MetadataStore
 from app.models.live import LiveSessionResponse
 from app.engine.realtime.store import get_session, save_session
@@ -22,9 +23,10 @@ def on_modifier_action(
         target = _find_row(state.cpts, cpt_target)
         if target:
             if action == "approve":
-                target.lifecycle = "detected" if target.is_timed else "manual_billing"
-                target.billing_status = "confirmed" if target.is_timed else "manual"
-                target.rule_message = f"{'AMA Rule of 8' if state.billing_rule == 'ama_rule_of_8' else '8-minute rule'} applies — provide duration when this CPT ends." if target.is_timed else "Occurrence/modality code — units are calculated manually by the therapist."
+                target.lifecycle = "detected"
+                target.billing_status = "confirmed"
+                meta = live_rule_meta(target.cpt_code, store)
+                target.rule_message = rule_detect_message(meta, state.billing_rule)
                 target.message = "AI suggestion approved."
                 msg = f"AI suggestion {cpt_target} approved."
             else:
@@ -38,8 +40,9 @@ def on_modifier_action(
         _refresh_and_recalculate_billing_and_save(state, store)
         return _live_response(state, store, msg)
         
-    if conflict_id.startswith("ai_reject_"):
-        cpt_to_remove = conflict_id.replace("ai_reject_", "")
+    if conflict_id.startswith("ai_reject_") or conflict_id.startswith("therapist_remove_"):
+        prefix = "ai_reject_" if conflict_id.startswith("ai_reject_") else "therapist_remove_"
+        cpt_to_remove = conflict_id.replace(prefix, "", 1)
         target = _find_row(state.cpts, cpt_to_remove)
         if target:
             target.lifecycle = "removed"
@@ -47,9 +50,13 @@ def on_modifier_action(
             target.units = 0
             target.duration_minutes_exact = 0
             target.minutes_billed = 0
-            target.message = f"Rejected — AI detected weak transcript support."
+            target.message = (
+                "Rejected — AI detected weak transcript support."
+                if prefix == "ai_reject_"
+                else "Removed by therapist."
+            )
         _refresh_and_recalculate_billing_and_save(state, store)
-        return _live_response(state, store, f"CPT {cpt_to_remove} removed due to weak transcript support.")
+        return _live_response(state, store, f"CPT {cpt_to_remove} removed.")
 
     conflict = next((c for c in state.conflicts if c.conflict_id == conflict_id), None)
     if not conflict:

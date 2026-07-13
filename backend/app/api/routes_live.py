@@ -2,10 +2,18 @@ from fastapi import APIRouter, HTTPException
 from app.engine.loader import load_metadata
 from app.engine.realtime.handlers_session import create_live_session, get_live_session, on_session_end, on_sentence_fed
 from app.engine.realtime.handlers_icd import on_icd_detected
-from app.engine.realtime.handlers_cpt import on_cpt_detected, on_cpt_start, on_cpt_end, on_cpt_pause, on_cpt_resume
+from app.engine.realtime.handlers_cpt import (
+    on_cpt_detected,
+    on_cpt_start,
+    on_cpt_end,
+    on_cpt_pause,
+    on_cpt_resume,
+    on_cpt_area,
+)
 from app.engine.realtime.handlers_modifier import on_modifier_action
 from app.models.live import (
     LiveClientInfo,
+    LiveCptAreaRequest,
     LiveCptDetectRequest,
     LiveCptDurationRequest,
     LiveCptEndRequest,
@@ -90,6 +98,12 @@ async def live_session_cpt_pause(session_id: str, body: LiveCptDurationRequest) 
 async def live_session_cpt_resume(session_id: str, body: LiveCptDetectRequest) -> LiveSessionResponse:
     store = _live_store()
     return on_cpt_resume(session_id, body.cpt_code, store)
+
+
+@router.post("/{session_id}/cpt/area", response_model=LiveSessionResponse)
+async def live_session_cpt_area(session_id: str, body: LiveCptAreaRequest) -> LiveSessionResponse:
+    store = _live_store()
+    return on_cpt_area(session_id, body.cpt_code, body.area_sq_cm, store)
 
 
 @router.post("/{session_id}/modifier", response_model=LiveSessionResponse)

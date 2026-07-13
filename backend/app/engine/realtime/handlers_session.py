@@ -1,5 +1,6 @@
 
 import re
+from app.engine.billing_rule_catalog import live_rule_meta, rule_detect_message
 from app.engine.loader import MetadataStore
 from app.models.live import LiveSessionResponse, LiveClientInfo, LiveCptRow
 from app.engine.realtime.store import get_session, save_session
@@ -113,22 +114,20 @@ def on_sentence_fed(
                 
     added_cpts = []
     for cpt in possible_cpts:
-        if cpt not in store.medexa:
+        if cpt not in store.medexa or not store.knows_cpt(cpt):
             continue
         support = validate_cpt_transcript_support(cpt, sentence, store)
         if support.confidence_score and support.confidence_score >= 80:
             if not any(r.cpt_code == cpt for r in state.cpts):
-                is_timed = store.is_timed(cpt)
+                meta = live_rule_meta(cpt, store)
                 row = LiveCptRow(
                     cpt_code=cpt,
                     sequence=_next_sequence(state.cpts),
                     lifecycle="pending_start",
-                    is_timed=is_timed,
+                    billing_rule=meta.billing_rule,
                     billing_status="confirmed",
-                    rule_message=(
-                        f"{'AMA Rule of 8' if state.billing_rule == 'ama_rule_of_8' else '8-minute rule'} applies — click start when ready." 
-                        if is_timed else "Occurrence/modality code — units are calculated manually."
-                    ),
+                    rule_message=rule_detect_message(meta, state.billing_rule),
+                    occurrence_count=1,
                 )
                 _apply_icd_validation(row, state.icds, store)
                 _sync_row_messages(row)

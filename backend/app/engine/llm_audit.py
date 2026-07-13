@@ -25,12 +25,13 @@ RULES:
 - Apply the timing rule named in the input JSON "rule" field. Do not choose a different rule.
 - Set rule_applied to exactly "Medicare 8-Minute" when the input rule is Medicare 8-Minute Rule, or "AMA Rule of 8" when the input rule is AMA Rule of Eight.
 - For each line:
-  - If the CPT is untimed (per the timing rules), expected_units = 1 per documented occurrence, regardless of duration_minutes.
-  - If the CPT is timed, recalculate expected_units strictly from duration_minutes using the applicable rule. Do not round informally — apply the rule's exact minute thresholds.
-  - If duration_minutes is missing, null, zero, or negative, mark status = FAILED with reasoning stating the data issue. Do not guess a value.
+  - Calculate expected_units strictly from billing_rule and the supplied rule-specific metadata.
+  - Do not fail an untimed or area-based line solely because duration_minutes is zero.
+  - Require positive duration only for 8_minute_rule, full_block_required, and time_band_select.
+  - Require area_sq_cm only when the area-based rule needs a threshold or increment.
   - If the CPT code is not recognized under the timing rules provided, mark status = FAILED with reasoning stating the code is unrecognized. Do not assume a rule for it.
   - Compare expected_units to engine_units. status = PASSED only if they match exactly.
-  - On FAILED, reasoning must state: the duration/minutes used, the rule applied, the expected_units calculated, and the engine_units provided.
+  - On FAILED, reasoning must state the relevant input (duration, occurrence count, or area), rule applied, expected_units, and engine_units.
 - overall_validation = FAILED if any line is FAILED or has a data issue, otherwise PASSED.
 - auditor_notes: 1-2 sentences. Summarize only FAILED lines and systemic issues (e.g., repeated pattern of miscalculation, unrecognized codes). Leave brief if all PASSED.
 - Every numeric field (expected_units, engine_units) must be a plain number — no strings, no ranges, no rounding symbols.
@@ -90,10 +91,13 @@ def _build_user_prompt(
             "cpt": line["cpt"],
             "duration_minutes": line["duration_minutes"],
             "engine_units": line["engine_units"],
-            "is_timed": line.get("is_timed"),
+            "billing_rule": line.get("billing_rule"),
             "description": line.get("description", ""),
             "modifier": line.get("modifier"),
             "region": line.get("region", ""),
+            "sequences": line.get("sequences", []),
+            "occurrence_count": line.get("occurrence_count"),
+            "area_sq_cm": line.get("area_sq_cm"),
         }
         for line in billing_summary
     ]
@@ -107,13 +111,12 @@ def _build_user_prompt(
         "Use timed_pool_minutes for Medicare pooling — untimed minutes must not enter the pool.\n\n"
         f"{json.dumps(payload, indent=2)}\n\n"
         "For each line:\n"
-        "- If untimed, expected_units = 1 per documented occurrence.\n"
-        "- If timed, recalculate expected_units strictly from duration_minutes using the specified rule "
-        "(exact thresholds, no informal rounding).\n"
-        "- If duration_minutes is missing, null, zero, or negative, mark status FAILED and state the data issue.\n"
+        "- Apply its exact billing_rule using the rule-specific metadata in the payload.\n"
+        "- Zero duration is valid for untimed and area-based rules.\n"
+        "- Require positive duration only for 8_minute_rule, full_block_required, and time_band_select.\n"
         "- If the CPT is unrecognized under the ruleset, mark status FAILED and state that.\n"
         "- Compare expected_units to engine_units; status PASSED only on exact match. "
-        "On FAILED, state duration used, rule applied, expected_units, and engine_units.\n"
+        "On FAILED, state relevant inputs, rule applied, expected_units, and engine_units.\n"
         "Every input line must produce exactly one output line — do not skip, merge, or omit.\n"
         "Set overall_validation FAILED if any line FAILED. "
         "Return rule_applied, overall_validation, per-line results, and concise auditor_notes."

@@ -47,8 +47,8 @@ class BillableCode(BaseModel):
     duration_minutes_exact: float | None = None
     duration_minutes_billed: int | None = None
     units: int
-    unit_calculation_method: Literal["eight_minute_rule", "occurrence", "ama_rule_of_8"]
-    is_timed: bool
+    unit_calculation_method: str
+    billing_rule: str | None = None
     sequences: list[int] = Field(default_factory=list)
     billing_status: Literal["confirmed", "pending_therapist_review"] = "confirmed"
     pending_reasons: list[str] = Field(default_factory=list)
@@ -231,12 +231,28 @@ class UiSuggestion(BaseModel):
     severity: Literal["action_required", "advisory"]
     summary: str
     conflict_id: str | None = None
+    conflict_with_cpt: str | None = None
+    heading: str | None = None
     modifiers: list[str] = Field(default_factory=list)
 
 
 class UiCptActions(BaseModel):
     reject_enabled: bool = False
     approve_enabled: bool = False
+
+
+class UiCptTimerMeta(BaseModel):
+    timer_mode: Literal["duration_units", "duration_doc", "occurrence", "area"] = "duration_doc"
+    block_minutes: int | None = None
+    increment_minutes: int | None = None
+    time_band_min: float | None = None
+    time_band_max: float | None = None
+    area_threshold_sq_cm: int | None = None
+    increment_sq_cm: int | None = None
+    session_billing_rule: str = "cms_8_minute"
+    area_sq_cm: float = 0.0
+    occurrence_count: int = 1
+    auto_units: bool = True
 
 
 class UiCptCard(BaseModel):
@@ -248,8 +264,10 @@ class UiCptCard(BaseModel):
     duration_display: str
     duration_minutes_exact: float
     verification_status: Literal["confirmed", "pending_review"]
-    card_style: Literal["standard", "review"]
+    card_style: Literal["standard", "review", "ai_suggested"]
     badge: str | None = None
+    ai_verified: bool = False
+    ai_confidence: int | None = None
     conflict_message: str | None = None
     conflict_with_cpt: str | None = None
     conflict_id: str | None = None
@@ -258,10 +276,11 @@ class UiCptCard(BaseModel):
     provisional_units: UiProvisionalUnits | None = None
     suggestions: list[UiSuggestion] = Field(default_factory=list)
     sequences: list[int] = Field(default_factory=list)
-    is_timed: bool = True
+    billing_rule: str | None = None
     applied_modifiers: list[str] = Field(default_factory=list)
     is_addon: bool = False
     parent_cpt_code: str | None = None
+    timer_meta: UiCptTimerMeta | None = None
 
 
 class UiIcdSuggestion(BaseModel):
