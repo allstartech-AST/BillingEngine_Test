@@ -8,7 +8,7 @@ from app.engine.realtime.helpers import (
     _append_icd, _reactivate_session, _apply_icd_validation,
     _revalidate_all_cpts_icd, _sync_row_messages, _next_sequence,
     _open_cpt_row, _live_response, _pending_and_recalculate_billing,
-    _refresh_conflicts, _recalculate_units,
+    _refresh_conflicts, _recalculate_units, _find_row,
 )
 from app.engine.realtime.rules import unresolved_bypassable
 from app.config import LLM_SENTENCES_PER_AI_BATCH
@@ -118,7 +118,7 @@ def on_sentence_fed(
             continue
         support = validate_cpt_transcript_support(cpt, sentence, store)
         if support.confidence_score and support.confidence_score >= 80:
-            if not any(r.cpt_code == cpt for r in state.cpts):
+            if _find_row(state.cpts, cpt) is None:
                 meta = live_rule_meta(cpt, store)
                 row = LiveCptRow(
                     cpt_code=cpt,

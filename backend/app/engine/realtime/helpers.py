@@ -79,6 +79,17 @@ def _sync_row_messages(row: LiveCptRow) -> None:
     row.message = " ".join(parts)
 
 
+def _merge_ai_suggestion_metadata(row: LiveCptRow, item: dict) -> None:
+    """Attach LLM suggest-missing evidence to an existing session CPT row."""
+    row.ai_supported = True
+    reasoning = str(item.get("reasoning") or "").strip()
+    if reasoning:
+        row.ai_reasoning = reasoning
+    quote = str(item.get("exact_quote") or "").strip()
+    if quote:
+        row.ai_exact_quote = quote
+
+
 def _next_sequence(cpts: list[LiveCptRow]) -> int:
     if not cpts:
         return 1

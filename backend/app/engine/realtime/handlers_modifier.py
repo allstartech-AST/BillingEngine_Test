@@ -1,5 +1,7 @@
 
 from app.engine.billing_rule_catalog import live_rule_meta, rule_detect_message
+from app.engine.cpt_evidence_quote import refine_cpt_evidence_quote
+from app.engine.evidence_logger import log_cpt_detection_evidence
 from app.engine.loader import MetadataStore
 from app.models.live import LiveSessionResponse
 from app.engine.realtime.store import get_session, save_session
@@ -28,6 +30,17 @@ def on_modifier_action(
                 meta = live_rule_meta(target.cpt_code, store)
                 target.rule_message = rule_detect_message(meta, state.billing_rule)
                 target.message = "AI suggestion approved."
+                log_cpt_detection_evidence(
+                    session_id,
+                    cpt_target,
+                    exact_quote=refine_cpt_evidence_quote(
+                        cpt_target,
+                        state.whole_transcript,
+                        getattr(target, "ai_exact_quote", ""),
+                        store,
+                    ),
+                    reasoning=target.ai_reasoning,
+                )
                 msg = f"AI suggestion {cpt_target} approved."
             else:
                 target.lifecycle = "removed"

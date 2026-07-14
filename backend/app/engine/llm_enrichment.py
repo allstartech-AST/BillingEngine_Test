@@ -12,7 +12,6 @@ from app.config import (
     load_env_files,
     openai_api_key,
 )
-from app.engine.evidence_logger import log_cpt_detection_evidence
 from app.engine.llm_cpt_tasks import (
     filter_suggestable_cpts,
     suggest_missing_cpts_async,
@@ -120,11 +119,14 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                 from app.engine.realtime.helpers import (
                     _apply_conflict_pending,
                     _apply_icd_validation,
+                    _find_row,
+                    _merge_ai_suggestion_metadata,
                     _next_sequence,
                     _recalculate_units,
                     _refresh_conflicts,
                     _sync_row_messages,
                 )
+                from app.engine.realtime.rules import active_cpt_codes
                 from app.engine.realtime.store import get_session, save_session
                 from app.models.live import LiveCptRow
 
@@ -226,46 +228,53 @@ async def _ai_enrichment_worker(session_id: str, store: MetadataStore) -> None:
                             seg_start,
                             seg_end,
                         )
-                        existing_cpts = [r.cpt_code for r in state.cpts]
+                        active_cpts = sorted(active_cpt_codes(state.cpts))
                         hints = lexical_hints_for_segment(
                             segment,
                             store,
-                            set(existing_cpts),
+                            set(active_cpts),
                         )
                         try:
                             res = await suggest_missing_cpts_async(
                                 transcript_for_prompt,
-                                existing_cpts,
+                                active_cpts,
                                 store,
                                 lexical_hints=hints or None,
                                 thread=llm_thread,
                             )
+                            state = get_session(session_id)
                             suggested = res.get("suggested_cpts", [])
-                            suggested = filter_suggestable_cpts(suggested, existing_cpts, store)
-                            if suggested:
-                                for item in suggested:
-                                    code = item.get("cpt_code")
-                                    if code and store.knows_cpt(code) and code not in existing_cpts:
-                                        row = LiveCptRow(
-                                            cpt_code=code,
-                                            sequence=_next_sequence(state.cpts),
-                                            lifecycle="ai_suggested",
-                                            billing_rule=store.billing_rule(code),
-                                            billing_status="pending_therapist_review",
-                                            rule_message="AI suggested code based on transcript.",
-                                            ai_supported=True,
-                                            ai_reasoning=item.get("reasoning", ""),
-                                        )
-                                        _apply_icd_validation(row, state.icds, store)
-                                        _sync_row_messages(row)
-                                        state.cpts.append(row)
-                                        existing_cpts.append(code)
-                                        log_cpt_detection_evidence(
-                                            session_id,
-                                            code,
-                                            exact_quote=item.get("exact_quote", ""),
-                                            reasoning=item.get("reasoning", ""),
-                                        )
+                            pending_new: list[dict] = []
+                            for item in suggested:
+                                code = (item.get("cpt_code") or "").strip()
+                                if not code or not store.knows_cpt(code):
+                                    continue
+                                existing_row = _find_row(state.cpts, code)
+                                if existing_row:
+                                    _merge_ai_suggestion_metadata(existing_row, item)
+                                else:
+                                    pending_new.append(item)
+
+                            active_cpts = sorted(active_cpt_codes(state.cpts))
+                            for item in filter_suggestable_cpts(pending_new, active_cpts, store):
+                                code = (item.get("cpt_code") or "").strip()
+                                if not code or code in active_cpts:
+                                    continue
+                                row = LiveCptRow(
+                                    cpt_code=code,
+                                    sequence=_next_sequence(state.cpts),
+                                    lifecycle="ai_suggested",
+                                    billing_rule=store.billing_rule(code),
+                                    billing_status="pending_therapist_review",
+                                    rule_message="AI suggested code based on transcript.",
+                                    ai_supported=True,
+                                    ai_reasoning=item.get("reasoning", ""),
+                                    ai_exact_quote=item.get("exact_quote", ""),
+                                )
+                                _apply_icd_validation(row, state.icds, store)
+                                _sync_row_messages(row)
+                                state.cpts.append(row)
+                                active_cpts.append(code)
                         except Exception:
                             pass
                         current_pointer = seg_end

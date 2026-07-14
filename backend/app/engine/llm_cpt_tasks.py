@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.config import load_env_files
 from app.engine.conflict_evaluation import codes_hard_rejected_if_added
+from app.engine.cpt_evidence_quote import refine_suggested_cpt_quotes
 from app.engine.llm_kb import (
     build_compact_medexa_reference,
     build_kb_context,
@@ -41,8 +42,14 @@ SUGGEST_CONFLICT_INSTRUCTION = (
 )
 
 EXACT_QUOTE_INSTRUCTION = (
-    "For each suggested CPT, extract the exact 3-7 consecutive words from the transcript "
-    "that justify the suggestion. Return that substring verbatim in exact_quote. Do not paraphrase."
+    "For each suggested CPT, set exact_quote to a verbatim 5-12 word substring from the "
+    "Transcript that contains service-specific language for THAT code only. Prefer the code's "
+    "Medexa trigger phrases (examples: 'therapeutic exercise' for 97110, 'manual therapy' or "
+    "'joint mobilization' for 97140, 'therapeutic activities' or 'functional activity training' "
+    "for 97530, 'flexible endoscopic evaluation of swallowing' for 92612). "
+    "Do NOT use generic coaching, object-placement, speed/control cues, or scope/video review "
+    "language that could support multiple CPTs. The quote must appear word-for-word in the "
+    "Transcript. If no code-specific phrase exists, omit that CPT."
 )
 
 
@@ -88,7 +95,10 @@ class SuggestedCptItem(BaseModel):
     reasoning: str = Field(description="Why this code is supported by the transcript")
     exact_quote: str = Field(
         default="",
-        description="Exact 3-7 word transcript substring supporting this suggestion",
+        description=(
+            "Verbatim 5-12 word transcript substring with CPT-specific trigger language "
+            "(not generic coaching or activity cues)"
+        ),
     )
 
 
@@ -262,6 +272,7 @@ async def suggest_missing_cpts_async(
                 temperature=0.2,
             )
         suggested = result.get("suggested_cpts", [])
+        suggested = refine_suggested_cpt_quotes(suggested, transcript, store)
         filtered = filter_suggestable_cpts(suggested, existing_cpts, store)
         result["suggested_cpts"] = filtered
         logger.info("OpenAI CPT suggestion response: %s", result)

@@ -46,6 +46,7 @@ class LiveCptRow(BaseModel):
     mue_note: str = ""
     ai_supported: bool | None = None
     ai_reasoning: str = ""
+    ai_exact_quote: str = ""
     ai_confidence: int | None = None
     region: str = "--"
     area_sq_cm: float = 0.0

@@ -85,8 +85,9 @@ def log_cpt_detection_evidence(
     """
     Append one LLM detection record under the CPT code in detection_evidence.json.
 
-    The file persists across server restarts; each call adds another entry to the
-    CPT's array without removing prior sessions or other CPT keys.
+    Called when the therapist approves an AI-suggested CPT — rejected suggestions
+    are never logged. The file persists across server restarts; each call adds
+    another entry to the CPT's array without removing prior sessions or other CPT keys.
     """
     quote = str(exact_quote or "").strip()
     code = str(cpt_code or "").strip()
